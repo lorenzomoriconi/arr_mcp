@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.1](https://github.com/lorenzomoriconi/arr_mcp/compare/arr_mcp/v1.15.0...arr_mcp/v1.15.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **hermes:** inspect session database metadata without config limits ([ea6ac7b](https://github.com/lorenzomoriconi/arr_mcp/commit/ea6ac7bf25ef24f5e0622bad2393de9bad6b52e6))
+* **hermes:** support native source auth and read-only config files ([2b879f9](https://github.com/lorenzomoriconi/arr_mcp/commit/2b879f97c125c2510e065af8f3c1281979f73c82))
+
 ## [1.15.0](https://github.com/lorenzomoriconi/arr_mcp/compare/arr_mcp/v1.14.0...arr_mcp/v1.15.0) (2026-10-17)
 
 
