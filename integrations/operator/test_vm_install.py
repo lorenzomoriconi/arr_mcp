@@ -132,3 +132,14 @@ class NativeInstallRollbackTests(unittest.TestCase):
         self.payload['skill']=base64.b64encode(b'__HERMES_PYTHON__ /opt/helper.py').decode()
         with self.assertRaisesRegex(ValueError,'placeholder'):vm_install.install(self.payload)
         vm_install.subprocess.run.assert_not_called()
+
+
+    def test_large_session_database_checks_idle_and_active_leases(self):
+        import time
+        with sqlite3.connect(self.home / 'state.db') as connection:
+            connection.execute('CREATE TABLE history_fixture (payload BLOB)')
+            connection.execute('INSERT INTO history_fixture VALUES (zeroblob(?))',(5 * 1024 * 1024,))
+        vm_install.assert_idle(self.home)
+        with sqlite3.connect(self.home / 'state.db') as connection:
+            connection.execute('INSERT INTO session_turn_leases VALUES (?)',(time.time()+3600,))
+        with self.assertRaisesRegex(RuntimeError,'active turn'):vm_install.assert_idle(self.home)
