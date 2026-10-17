@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.15.0](https://github.com/lorenzomoriconi/arr_mcp/compare/arr_mcp/v1.14.0...arr_mcp/v1.15.0) (2026-10-17)
+
+
+### Features
+
+* **hermes:** add bounded native MCP media integration ([78dd044](https://github.com/lorenzomoriconi/arr_mcp/commit/78dd044b32ac67cfd6602e5d1c80251885e1b296))
+
+
+### Bug Fixes
+
+* **hermes:** fence reserved presets and shutdown rollback races ([0d1e0ed](https://github.com/lorenzomoriconi/arr_mcp/commit/0d1e0ed0f7bca2cab864467e9495eeb87448d638))
+
+
+### Documentation
+
+* **hermes:** record final Opus review and native cleanup limits ([9f3d881](https://github.com/lorenzomoriconi/arr_mcp/commit/9f3d88182261a414dc36412583d9af6678b5f25c))
+
 ## [1.14.0](https://github.com/lorenzomoriconi/arr_mcp/compare/arr_mcp/v1.13.1...arr_mcp/v1.14.0) (2026-10-17)
 
 
