@@ -19,7 +19,7 @@ var qbitToolNames = map[Access][]string{
 	},
 	AccessWrite: {
 		"qbittorrent_add_torrent", "qbittorrent_stop_torrents", "qbittorrent_start_torrents",
-		"qbittorrent_recheck_torrents", "qbittorrent_set_category", "qbittorrent_create_category",
+		"qbittorrent_recheck_torrents", "qbittorrent_reannounce_torrents", "qbittorrent_set_category", "qbittorrent_create_category",
 		"qbittorrent_edit_category", "qbittorrent_add_tags", "qbittorrent_remove_tags",
 		"qbittorrent_set_location", "qbittorrent_rename_torrent", "qbittorrent_set_priority",
 		"qbittorrent_set_torrent_limits", "qbittorrent_set_global_limits",
@@ -57,7 +57,7 @@ func qbitCfg(url string, perms config.Permissions) *config.Config {
 	}, perms)
 }
 
-func TestQBittorrentRegistersAllTwentyTwoTools(t *testing.T) {
+func TestQBittorrentRegistersAllTwentyThreeTools(t *testing.T) {
 	srv, _ := fakeQBitServer(t, `[]`)
 	names := toolNames(t, connect(t, qbitCfg(srv.URL, permsFull)))
 
@@ -70,8 +70,8 @@ func TestQBittorrentRegistersAllTwentyTwoTools(t *testing.T) {
 			}
 		}
 	}
-	if total != 22 {
-		t.Fatalf("test expects %d tools, want 22; the table above is stale", total)
+	if total != 23 {
+		t.Fatalf("test expects %d tools, want 23; the table above is stale", total)
 	}
 
 	qbitCount := 0
@@ -80,8 +80,8 @@ func TestQBittorrentRegistersAllTwentyTwoTools(t *testing.T) {
 			qbitCount++
 		}
 	}
-	if qbitCount != 22 {
-		t.Errorf("advertised %d qbittorrent tools, want 22: %v", qbitCount, names)
+	if qbitCount != 23 {
+		t.Errorf("advertised %d qbittorrent tools, want 23: %v", qbitCount, names)
 	}
 }
 

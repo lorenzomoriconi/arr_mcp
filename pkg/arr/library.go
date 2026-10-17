@@ -198,10 +198,21 @@ type ManualImportQuery struct {
 	FilterExistingFiles *bool
 }
 
+// QualityRevision preserves native proper/repack metadata through manual imports.
+type QualityRevision struct {
+	Version  int  `json:"version"`
+	Real     int  `json:"real"`
+	IsRepack bool `json:"isRepack"`
+}
+
 // ManualImportCandidate is one file the service could import, with the match it
 // guessed. A candidate with rejections and no series or movie needs the caller
 // to supply the missing identity before it can be imported.
 type ManualImportCandidate struct {
+	Revision     *QualityRevision `json:"revision,omitempty"`
+	IndexerFlags int              `json:"indexerFlags,omitempty"`
+	ReleaseType  string           `json:"releaseType,omitempty"`
+
 	ID           int      `json:"id"`
 	Path         string   `json:"path" jsonschema:"pass back to the manual_import tool unchanged"`
 	RelativePath string   `json:"relativePath,omitempty"`
@@ -223,6 +234,8 @@ type ManualImportCandidate struct {
 // whole series or movie it matched, so those are decoded down to an id and a
 // title rather than kept.
 type rawManualImportCandidate struct {
+	IndexerFlags int    `json:"indexerFlags"`
+	ReleaseType  string `json:"releaseType"`
 	ID           int    `json:"id"`
 	Path         string `json:"path"`
 	RelativePath string `json:"relativePath"`
@@ -240,7 +253,8 @@ type rawManualImportCandidate struct {
 		ID int `json:"id"`
 	} `json:"episodes"`
 	Quality struct {
-		Quality struct {
+		Revision *QualityRevision `json:"revision"`
+		Quality  struct {
 			Name string `json:"name"`
 		} `json:"quality"`
 	} `json:"quality"`
@@ -255,7 +269,7 @@ type rawManualImportCandidate struct {
 // toCandidate projects an upstream candidate onto the trimmed view.
 func (r rawManualImportCandidate) toCandidate() ManualImportCandidate {
 	out := ManualImportCandidate{
-		ID: r.ID, Path: r.Path, RelativePath: r.RelativePath, Size: r.Size,
+		ID: r.ID, Path: r.Path, RelativePath: r.RelativePath, Size: r.Size, Revision: r.Quality.Revision, IndexerFlags: r.IndexerFlags, ReleaseType: r.ReleaseType,
 		SeasonNumber: r.SeasonNumber, Quality: r.Quality.Quality.Name,
 		ReleaseGroup: r.ReleaseGroup, DownloadID: r.DownloadID,
 		Rejections: r.Rejections,
@@ -312,6 +326,9 @@ func ListManualImportCandidates(ctx context.Context, c *Client, in ManualImportQ
 // ManualImportFile is one file to import and how to interpret it. Quality and
 // Languages are names as the preview reports them, not ids.
 type ManualImportFile struct {
+	Revision     *QualityRevision
+	IndexerFlags int
+	ReleaseType  string
 	Path         string
 	SeriesID     int
 	EpisodeIDs   []int
@@ -383,6 +400,15 @@ func ManualImportChecked(ctx context.Context, c *Client, files []ManualImportFil
 				return CommandResult{}, err
 			}
 			entry["quality"] = map[string]any{"quality": quality}
+			if f.Revision != nil {
+				entry["quality"].(map[string]any)["revision"] = f.Revision
+			}
+			if f.IndexerFlags != 0 {
+				entry["indexerFlags"] = f.IndexerFlags
+			}
+			if f.ReleaseType != "" {
+				entry["releaseType"] = f.ReleaseType
+			}
 		}
 		if len(f.Languages) > 0 {
 			resolved, err := languages.resolveAll(f.Languages)

@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 // Server wires configured service instances into an MCP server.
 type Server struct {
+	magnets    *magnetPlans
 	cfg        *config.Config
 	log        *logger.Logger
 	mcp        *mcp.Server
@@ -28,6 +30,7 @@ type Server struct {
 // New builds a server exposing tools for every configured service instance.
 func New(cfg *config.Config, log *logger.Logger) *Server {
 	s := &Server{
+		magnets:    newMagnetPlans(),
 		cfg:        cfg,
 		imports:    newImportPlans(),
 		knownTools: map[string]struct{}{},
@@ -85,7 +88,13 @@ func (s *Server) HTTPHandler() (http.Handler, error) {
 		return nil, fmt.Errorf("guarded HTTP requires server.bearerToken; reference a private environment variable")
 	}
 	mux := http.NewServeMux()
-	endpoint := http.Handler(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.mcp }, nil))
+	endpointPath := s.cfg.Server.Path
+	if endpointPath == "" {
+		endpointPath = "/mcp"
+	}
+	endpoint := http.Handler(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.mcp }, &mcp.StreamableHTTPOptions{
+		Stateless: s.cfg.Server.Stateless, JSONResponse: s.cfg.Server.JSONResponse,
+	}))
 	if token != "" {
 		next := endpoint
 		expected := sha256.Sum256([]byte(token))
@@ -101,7 +110,35 @@ func (s *Server) HTTPHandler() (http.Handler, error) {
 			next.ServeHTTP(w, r)
 		})
 	}
-	mux.Handle("/mcp", endpoint)
+	if len(s.cfg.Server.AllowedPeers) > 0 {
+		prefixes := make([]netip.Prefix, 0, len(s.cfg.Server.AllowedPeers))
+		for _, value := range s.cfg.Server.AllowedPeers {
+			prefix, err := netip.ParsePrefix(value)
+			if err != nil {
+				return nil, fmt.Errorf("server.allowedPeers: %w", err)
+			}
+			prefixes = append(prefixes, prefix)
+		}
+		next := endpoint
+		endpoint = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			peer, err := netip.ParseAddrPort(r.RemoteAddr)
+			allowed := false
+			if err == nil {
+				for _, prefix := range prefixes {
+					if prefix.Contains(peer.Addr().Unmap()) {
+						allowed = true
+						break
+					}
+				}
+			}
+			if !allowed {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+	mux.Handle(endpointPath, endpoint)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
@@ -133,7 +170,7 @@ func (s *Server) RunHTTP(ctx context.Context, addr string) error {
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
 
-	s.log.Info("serving MCP over HTTP on %s (endpoint /mcp)", addr)
+	s.log.Info("serving MCP over HTTP on %s (path=%s stateless=%t)", addr, s.cfg.Server.Path, s.cfg.Server.Stateless)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("http server: %w", err)
 	}

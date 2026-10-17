@@ -8,8 +8,9 @@ import (
 
 // Instance is a single configured endpoint for a service.
 type Instance struct {
-	Name string `yaml:"name"`
-	URL  string `yaml:"url"`
+	AuthBypass bool   `yaml:"authBypass"`
+	Name       string `yaml:"name"`
+	URL        string `yaml:"url"`
 	// APIKey authenticates services that take a key header (Sonarr, Radarr,
 	// Prowlarr, Bazarr). Username and Password authenticate the download
 	// clients (qBittorrent, NZBGet). CredentialKindFor says which applies.
@@ -27,6 +28,7 @@ type Instance struct {
 
 // Config is the fully resolved server configuration.
 type Config struct {
+	Downloads   DownloadPolicy        `yaml:"downloads"`
 	Tools       ToolPolicy            `yaml:"tools"`
 	Imports     ImportPolicy          `yaml:"imports"`
 	Server      ServerConfig          `yaml:"server"`
@@ -103,4 +105,10 @@ func (c *Config) Resolve(service, name string) (*Instance, error) {
 
 	return nil, fmt.Errorf("%s has multiple instances and no default; specify one of: %s",
 		service, strings.Join(c.InstanceNames(service), ", "))
+}
+
+// DownloadPolicy selects the native client used by guarded magnets and import evidence.
+type DownloadPolicy struct {
+	Client  string `yaml:"client"`
+	Guarded bool   `yaml:"guarded"`
 }

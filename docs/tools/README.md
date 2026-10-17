@@ -2,11 +2,11 @@
 
 | Service | Tools |
 |---|---|
-| [Sonarr](sonarr.md) | 79 |
-| [Radarr](radarr.md) | 75 |
+| [Sonarr](sonarr.md) | 81 |
+| [Radarr](radarr.md) | 77 |
 | [Bazarr](bazarr.md) | 33 |
 | [Prowlarr](prowlarr.md) | 23 |
-| [qBittorrent](qbittorrent.md) | 22 |
+| [qBittorrent](qbittorrent.md) | 23 |
 | [NZBGet](nzbget.md) | 18 |
 | [Maintainerr](maintainerr.md) | 25 |
 | [Seerr](seerr.md) | 17 |

@@ -416,3 +416,8 @@ func TestMissingCleanupAcceptanceLeavesGuardedPlanUnspent(t *testing.T) {
 		t.Fatal("input refusal spent the plan")
 	}
 }
+
+func TestGuardedImportUsesNativeCanonicalDownloadID(t *testing.T) {
+	_, session := guardedFixture(t, false)
+	importCall(t, session, "sonarr", "_manual_import_preview", map[string]any{"seriesId": 1, "downloadId": "hash"}, true)
+}

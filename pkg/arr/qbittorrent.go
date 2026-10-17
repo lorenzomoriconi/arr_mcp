@@ -28,6 +28,7 @@ const shareLimitDefault = -2
 // about fifty fields including magnet URIs, tracker URLs and session
 // counters; these are the ones that answer "what is it doing?".
 type Torrent struct {
+	AmountLeft       int64    `json:"amountLeft"`
 	Hash             string   `json:"hash"`
 	Name             string   `json:"name"`
 	State            string   `json:"state" jsonschema:"downloading, uploading, stalledDL, stalledUP, stoppedDL, stoppedUP, queuedDL, queuedUP, checkingDL, checkingUP, metaDL, moving, error, missingFiles or unknown"`
@@ -55,6 +56,7 @@ type Torrent struct {
 
 // rawTorrent is the subset of torrents/info this package reads.
 type rawTorrent struct {
+	AmountLeft       int64   `json:"amount_left"`
 	Hash             string  `json:"hash"`
 	Name             string  `json:"name"`
 	State            string  `json:"state"`
@@ -82,7 +84,7 @@ type rawTorrent struct {
 
 func (r rawTorrent) toTorrent() Torrent {
 	return Torrent{
-		Hash: r.Hash, Name: r.Name, State: r.State, Progress: r.Progress,
+		Hash: r.Hash, Name: r.Name, State: r.State, Progress: r.Progress, AmountLeft: r.AmountLeft,
 		Size: r.Size, Downloaded: r.Downloaded, Uploaded: r.Uploaded,
 		DownloadSpeed: r.DLSpeed, UploadSpeed: r.UPSpeed, ETA: r.ETA, Ratio: r.Ratio,
 		Category: r.Category, Tags: splitTags(r.Tags), SavePath: r.SavePath,
@@ -559,3 +561,8 @@ func qbitAction(ctx context.Context, c *Client, path string, form url.Values) er
 
 // ftoa formats a float for a form field without trailing zeros.
 func ftoa(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
+
+// QBittorrentReannounceTorrents asks trackers for peers without changing torrent data.
+func QBittorrentReannounceTorrents(ctx context.Context, c *Client, hashes []string) error {
+	return qbitAction(ctx, c, "/torrents/reannounce", url.Values{"hashes": {strings.Join(hashes, "|")}})
+}

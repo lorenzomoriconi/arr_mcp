@@ -31,7 +31,7 @@
 ---
 
 - **Real MCP** — JSON-RPC 2.0 over stdio and Streamable HTTP, built on the official Go SDK
-- **327 tools** — what you would otherwise do by clicking through each web UI
+- **332 tools** — what you would otherwise do by clicking through each web UI
 - **Multi-instance** — run two Sonarrs (4K and 1080p) and address them by name
 - **Permission controls** — read-only, confirm-before-write, or full access
 - **Single static binary**, distroless container, multi-arch image
@@ -40,11 +40,11 @@
 
 | Service | Tools | | Service | Tools |
 |---|---|---|---|---|
-| [Sonarr](docs/tools/sonarr.md) | 79 | | [Maintainerr](docs/tools/maintainerr.md) | 25 |
-| [Radarr](docs/tools/radarr.md) | 75 | | [Seerr](docs/tools/seerr.md) | 17 |
+| [Sonarr](docs/tools/sonarr.md) | 81 | | [Maintainerr](docs/tools/maintainerr.md) | 25 |
+| [Radarr](docs/tools/radarr.md) | 77 | | [Seerr](docs/tools/seerr.md) | 17 |
 | [Bazarr](docs/tools/bazarr.md) | 33 | | [Jellyfin](docs/tools/jellyfin.md) | 11 |
 | [Prowlarr](docs/tools/prowlarr.md) | 23 | | [Jellystat](docs/tools/jellystat.md) | 10 |
-| [qBittorrent](docs/tools/qbittorrent.md) | 22 | | [Synology DSM](docs/tools/synology.md) | 14 |
+| [qBittorrent](docs/tools/qbittorrent.md) | 23 | | [Synology DSM](docs/tools/synology.md) | 14 |
 | [NZBGet](docs/tools/nzbget.md) | 18 | | | |
 
 Expose one service or all of them; anything you don't configure registers no tools.
