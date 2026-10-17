@@ -113,9 +113,11 @@ const defaultTimeout = 30 * time.Second
 
 // Credentials carries the secrets for whichever auth scheme a spec selects.
 type Credentials struct {
-	APIKey   string
-	Username string
-	Password string
+	// AuthBypass explicitly uses an existing qBittorrent trusted-source policy.
+	AuthBypass bool
+	APIKey     string
+	Username   string
+	Password   string
 }
 
 // Query is a set of URL query parameters.
@@ -464,7 +466,9 @@ func (c *Client) transmit(ctx context.Context, method, path string, payload []by
 	}
 
 	var sid string
-	if c.spec.Auth == AuthSession {
+	bypass := c.spec.Name == "qbittorrent" && c.creds.AuthBypass && c.creds.APIKey == "" && c.creds.Username == "" && c.creds.Password == ""
+	useSession := c.spec.Auth == AuthSession && !bypass
+	if useSession {
 		if sid, err = c.ensureSession(ctx, "", false); err != nil {
 			return nil, err
 		}
@@ -474,7 +478,7 @@ func (c *Client) transmit(ctx context.Context, method, path string, payload []by
 	if err != nil {
 		return nil, err
 	}
-	if resp.status == http.StatusForbidden && c.spec.Auth == AuthSession {
+	if resp.status == http.StatusForbidden && useSession {
 		if sid, err = c.ensureSession(ctx, sid, true); err != nil {
 			return nil, err
 		}

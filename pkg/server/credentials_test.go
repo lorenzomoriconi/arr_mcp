@@ -94,3 +94,9 @@ func callSynologyRaw(t *testing.T, cs *mcp.ClientSession, name string) *mcp.Call
 	}
 	return res
 }
+
+func TestInstanceCredentialsPreserveExplicitTrustedSourceFlag(t *testing.T) {
+	if !InstanceCredentials(&config.Instance{AuthBypass: true}).AuthBypass {
+		t.Fatal("explicit qBittorrent source policy lost in client construction")
+	}
+}

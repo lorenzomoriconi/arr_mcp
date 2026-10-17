@@ -92,7 +92,18 @@ def sha(raw):
 
 def assert_idle(home):
     database = home / 'state.db'
-    read_regular(database)
+    # A conversation database is not a bounded configuration document. Check
+    # its type without reading its history or applying config-file size limits.
+    directory = parent_fd(database)
+    try:
+        descriptor = os.open(database.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise RuntimeError('Refusing a non-regular session database')
+        finally:
+            os.close(descriptor)
+    finally:
+        os.close(directory)
     with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True) as connection:
         active = connection.execute('SELECT count(*) FROM session_turn_leases WHERE expires_at > ?', (time.time(),)).fetchone()[0]
     if active:
