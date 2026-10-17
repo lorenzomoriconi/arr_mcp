@@ -121,7 +121,7 @@ func mediaFixture(t *testing.T) (*guardedMediaFixture, *mcp.ClientSession) {
 			body = map[string]any{"id": 10, "name": "ManualImport", "status": "queued"}
 		case "/api/v2/auth/login":
 			w.Header().Set("Content-Type", "text/plain")
-			_, _ = w.Write([]byte("Ok."))
+			_, _ = w.Write([]byte("Fails."))
 			return
 		case "/api/v2/torrents/categories":
 			body = map[string]any{"tv": map[string]any{"name": "tv", "savePath": "/downloads"}}

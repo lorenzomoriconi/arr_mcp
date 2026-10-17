@@ -83,7 +83,14 @@ func newDSM(t *testing.T) *dsmFake {
 		}
 		_, _ = w.Write([]byte(`{"success":true,"data":{}}`))
 	}))
-	t.Cleanup(f.srv.Close)
+	// Each fixture is a fresh appliance. The OS can reuse a closed fixture's
+	// port, so it must not inherit that endpoint's process-wide login cache.
+	key := f.srv.URL + "\x00" + dsmTestUser + "\x00" + dsmTestPass
+	sessions.Delete(key)
+	t.Cleanup(func() {
+		sessions.Delete(key)
+		f.srv.Close()
+	})
 	return f
 }
 

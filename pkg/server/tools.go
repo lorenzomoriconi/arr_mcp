@@ -112,7 +112,7 @@ func register[In instanceSelector, Out any](
 // credentials. Config validation has already ensured only the fields the
 // service uses are set, so every field is passed through.
 func InstanceCredentials(inst *config.Instance) arr.Credentials {
-	return arr.Credentials{APIKey: inst.APIKey, Username: inst.Username, Password: inst.Password}
+	return arr.Credentials{APIKey: inst.APIKey, Username: inst.Username, Password: inst.Password, AuthBypass: inst.AuthBypass}
 }
 
 // --- tool input types ---

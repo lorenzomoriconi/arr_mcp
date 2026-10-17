@@ -19,7 +19,7 @@ Native release searches contact indexers and can consume their quotas. Forced gr
 
 A recycle bin or suitable snapshots are recommended for media recovery. Preserve the installation’s existing media-management settings unless separately authorized; this cutover does not enable recycle bins or claim media recovery. Connector rollback restores the previous app/client/configuration only, not media files. This is an explicit variance from the follow-up report’s blanket recycle-bin deployment recommendation, and does not create permission to perform an import or replacement.
 
-Require exact proxy peers, verified TLS, private scoped token, explicit guarded/client settings, no host/media/admin mounts, digest-pinned nonroot image, a staging test and private rollback snapshot. Check DNS pin persistence and watcher readability. If preparation aborts before writing targets after stopping the gateway, inspect the snapshot and manually restart the unchanged gateway. Never restore retired SSH credentials.
+Require exact proxy peers, verified TLS, private scoped token, explicit guarded/client settings, only the dedicated read-only config file and no media/admin mounts, digest-pinned nonroot image, a staging test and private rollback snapshot. Check DNS pin persistence and watcher readability. If preparation aborts before writing targets after stopping the gateway, inspect the snapshot and manually restart the unchanged gateway. Never restore retired SSH credentials.
 
 ## Remaining limits
 
