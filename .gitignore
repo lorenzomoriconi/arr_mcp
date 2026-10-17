@@ -20,3 +20,8 @@ config.yaml
 .vscode/
 
 CLAUDE.md
+
+# Operator runtime state and credentials
+*.local.*
+.env.*
+!.env.example

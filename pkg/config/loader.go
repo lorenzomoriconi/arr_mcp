@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"regexp"
@@ -87,9 +88,10 @@ type Permissions struct {
 
 // ServerConfig holds transport and logging settings.
 type ServerConfig struct {
-	Transport string `yaml:"transport"`
-	Addr      string `yaml:"addr"`
-	LogLevel  string `yaml:"logLevel"`
+	BearerToken string `yaml:"bearerToken"`
+	Transport   string `yaml:"transport"`
+	Addr        string `yaml:"addr"`
+	LogLevel    string `yaml:"logLevel"`
 }
 
 var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
@@ -135,7 +137,9 @@ func Load(path string) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading config %s: %w", path, err)
 		}
-		if err := yaml.Unmarshal(raw, c); err != nil {
+		decoder := yaml.NewDecoder(bytes.NewReader(raw))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(c); err != nil {
 			return nil, fmt.Errorf("parsing config %s: %w", path, err)
 		}
 	}
@@ -186,6 +190,10 @@ func (c *Config) loadFromEnv() error {
 
 // expand resolves ${VAR} references in every instance field that accepts them.
 func (c *Config) expand() error {
+	var err error
+	if c.Server.BearerToken, err = expandEnv("server.bearerToken", c.Server.BearerToken); err != nil {
+		return err
+	}
 	for svc, instances := range c.Services {
 		for i := range instances {
 			inst := &instances[i]
@@ -210,6 +218,12 @@ func (c *Config) expand() error {
 
 // validate rejects configuration that would fail confusingly at request time.
 func (c *Config) validate() error {
+	if err := c.Tools.validate(); err != nil {
+		return err
+	}
+	if c.Server.BearerToken != strings.TrimSpace(c.Server.BearerToken) || strings.ContainsAny(c.Server.BearerToken, "\r\n") {
+		return fmt.Errorf("server.bearerToken must not contain whitespace at its edges or newline characters")
+	}
 	if err := validatePermissions(&c.Permissions, "permissions"); err != nil {
 		return err
 	}

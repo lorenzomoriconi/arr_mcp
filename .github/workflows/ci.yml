@@ -16,6 +16,7 @@ on:
       - '.gitignore'
   # The Release workflow dispatches this on the release PR's branch.
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read

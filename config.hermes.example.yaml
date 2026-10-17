@@ -1,0 +1,73 @@
+# Sanitized opt-in example, not a production deployment.
+# URLs, credentials and token are supplied privately by the operator.
+server:
+  transport: http
+  addr: 0.0.0.0:8080
+  logLevel: info
+  bearerToken: ${ARR_MCP_HTTP_TOKEN}
+permissions:
+  mode: confirm
+  confirmScope: write
+  fallback: deny
+tools:
+  denyDestructive: true
+  allow:
+    - sonarr_list_series
+    - sonarr_get_series
+    - sonarr_search_series
+    - sonarr_list_episodes
+    - sonarr_list_episode_files
+    - sonarr_list_quality_profiles
+    - sonarr_list_root_folders
+    - sonarr_queue
+    - sonarr_history
+    - sonarr_get_command
+    - sonarr_list_commands
+    - sonarr_add_series
+    - sonarr_trigger_search
+    - sonarr_list_releases
+    - sonarr_grab_release
+    - sonarr_manual_import_preview
+    - sonarr_manual_import
+    - sonarr_update_quality_profile
+    - radarr_list_movies
+    - radarr_get_movie
+    - radarr_search_movies
+    - radarr_list_movie_files
+    - radarr_list_quality_profiles
+    - radarr_list_root_folders
+    - radarr_queue
+    - radarr_history
+    - radarr_get_command
+    - radarr_list_commands
+    - radarr_add_movie
+    - radarr_trigger_search
+    - radarr_list_releases
+    - radarr_grab_release
+    - radarr_manual_import_preview
+    - radarr_manual_import
+    - radarr_update_quality_profile
+    - qbittorrent_list_torrents
+    - qbittorrent_torrent_files
+    - qbittorrent_add_torrent
+    - qbittorrent_stop_torrents
+    - qbittorrent_start_torrents
+imports:
+  guarded: true
+services:
+  sonarr:
+    - name: main
+      url: ${SONARR_URL}
+      apiKey: ${SONARR_API_KEY}
+      default: true
+  radarr:
+    - name: main
+      url: ${RADARR_URL}
+      apiKey: ${RADARR_API_KEY}
+      default: true
+  qbittorrent:
+    - name: main
+      url: ${QBITTORRENT_URL}
+      username: ${QBITTORRENT_USERNAME}
+      password: ${QBITTORRENT_PASSWORD}
+      default: true

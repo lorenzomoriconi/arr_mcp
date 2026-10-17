@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/GauranshMathur/ARR_MCP/pkg/arr"
 )
@@ -446,10 +447,28 @@ func registerOperations(s *Server, svc string, spec arr.ServiceSpec, opts operat
 		name:        svc + "_history",
 		description: "List recent grab, import and failure events from " + svc + ".",
 		access:      AccessRead,
-	}, func(ctx context.Context, c *arr.Client, in LimitArgs) (HistoryList, error) {
-		records, err := arr.ListHistory(ctx, c, in.Limit)
-		return HistoryList{Records: records, Count: len(records)}, err
+	}, func(ctx context.Context, c *arr.Client, in HistoryArgs) (HistoryList, error) {
+		page, err := arr.ListHistoryPage(ctx, c, arr.HistoryQuery{Page: in.Page, Limit: in.Limit, DownloadID: in.DownloadID, SeriesID: in.SeriesID, EpisodeID: in.EpisodeID, MovieID: in.MovieID})
+		return HistoryList{Records: page.Records, Count: len(page.Records), Page: page.Page, PageSize: page.PageSize, Total: page.Total}, err
 	})
+
+	if opts.hasQueue {
+		register(s, svc, spec, toolMeta{
+			name: svc + "_list_commands", description: "Read recent or active background command receipts. A completed command is not proof that every file imported; verify exact-download history and current library files.", access: AccessRead,
+		}, func(ctx context.Context, c *arr.Client, _ EmptyArgs) (CommandList, error) {
+			commands, err := arr.GetJSON[[]arr.CommandResult](ctx, c, "/command")
+			return CommandList{Commands: commands, Count: len(commands)}, err
+		})
+		register(s, svc, spec, toolMeta{
+			name: svc + "_get_command", description: "Read one background command receipt by id.", access: AccessRead,
+		}, func(ctx context.Context, c *arr.Client, in IDArgs) (arr.CommandResult, error) {
+			if in.ID <= 0 {
+				return arr.CommandResult{}, fmt.Errorf("command id must be positive")
+			}
+			return arr.GetJSON[arr.CommandResult](ctx, c, fmt.Sprintf("/command/%d", in.ID))
+		})
+
+	}
 
 	register(s, svc, spec, toolMeta{
 		name:        svc + "_run_command",

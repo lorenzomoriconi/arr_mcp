@@ -56,8 +56,11 @@ type ManualImportPreviewArgs struct {
 
 // ManualImportCandidateList wraps manual import preview results.
 type ManualImportCandidateList struct {
-	Files []arr.ManualImportCandidate `json:"files"`
-	Count int                         `json:"count"`
+	PlanID    string                      `json:"planId,omitempty"`
+	ExpiresAt string                      `json:"expiresAt,omitempty"`
+	Warnings  []string                    `json:"warnings,omitempty"`
+	Files     []arr.ManualImportCandidate `json:"files"`
+	Count     int                         `json:"count"`
 }
 
 // ManualImportFileArg is one file to import. Quality and Languages are names as
@@ -75,8 +78,10 @@ type ManualImportFileArg struct {
 
 // ManualImportArgs is the input for the manual_import tools.
 type ManualImportArgs struct {
+	PlanID        string `json:"planId,omitempty" jsonschema:"guarded mode: opaque plan id from manual_import_preview"`
+	AcceptCleanup bool   `json:"acceptCleanup,omitempty" jsonschema:"guarded mode: explicitly accept native torrent/source cleanup even in copy mode"`
 	InstanceArg
-	Files      []ManualImportFileArg `json:"files" jsonschema:"the files to import, from manual_import_preview"`
+	Files      []ManualImportFileArg `json:"files,omitempty" jsonschema:"the files to import, from manual_import_preview"`
 	ImportMode string                `json:"importMode,omitempty" jsonschema:"auto, move or copy; defaults to auto"`
 }
 

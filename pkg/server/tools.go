@@ -35,7 +35,7 @@ func register[In instanceSelector, Out any](
 	s *Server, service string, spec arr.ServiceSpec, meta toolMeta,
 	fn func(context.Context, *arr.Client, In) (Out, error),
 ) {
-	if !s.registersForService(service, meta.access) {
+	if !s.cfg.Tools.Allows(meta.name, meta.access == AccessDestructive) || !s.registersForService(service, meta.access) {
 		return
 	}
 
@@ -62,6 +62,9 @@ func register[In instanceSelector, Out any](
 		InputSchema: schema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 		var zero Out
+		if !s.cfg.Tools.Allows(meta.name, meta.access == AccessDestructive) {
+			return nil, zero, fmt.Errorf("tool %s is denied by server policy", meta.name)
+		}
 
 		inst, err := s.cfg.Resolve(service, in.instanceName())
 		if err != nil {
@@ -182,6 +185,17 @@ type LimitArgs struct {
 	Limit int `json:"limit,omitempty" jsonschema:"maximum records to return; defaults to 20"`
 }
 
+// HistoryArgs pages events while retaining exact download/media identifiers.
+type HistoryArgs struct {
+	InstanceArg
+	Limit      int    `json:"limit,omitempty" jsonschema:"page size; defaults to 20, maximum 1000"`
+	Page       int    `json:"page,omitempty" jsonschema:"page number; defaults to 1"`
+	DownloadID string `json:"downloadId,omitempty" jsonschema:"limit to the exact download id"`
+	SeriesID   int    `json:"seriesId,omitempty" jsonschema:"Sonarr only: limit to one series"`
+	EpisodeID  int    `json:"episodeId,omitempty" jsonschema:"Sonarr only: limit to one episode"`
+	MovieID    int    `json:"movieId,omitempty" jsonschema:"Radarr only: limit to one movie"`
+}
+
 // DeleteQueueArgs is the input for queue removal tools.
 type DeleteQueueArgs struct {
 	InstanceArg
@@ -230,8 +244,11 @@ type QueueList struct {
 
 // HistoryList wraps history results.
 type HistoryList struct {
-	Records []arr.HistoryRecord `json:"records"`
-	Count   int                 `json:"count"`
+	Page     int                 `json:"page"`
+	PageSize int                 `json:"pageSize"`
+	Total    int                 `json:"total"`
+	Records  []arr.HistoryRecord `json:"records"`
+	Count    int                 `json:"count"`
 }
 
 // EpisodeList wraps episode results. Total is set only by the paged tools,
@@ -724,4 +741,10 @@ type UpdateList struct {
 type CollectionList struct {
 	Collections []arr.Collection `json:"collections"`
 	Count       int              `json:"count"`
+}
+
+// CommandList wraps trimmed native background command receipts.
+type CommandList struct {
+	Commands []arr.CommandResult `json:"commands"`
+	Count    int                 `json:"count"`
 }

@@ -19,3 +19,7 @@
 | Profiles | `radarr_create_quality_profile`, `radarr_update_quality_profile`, `radarr_create_custom_format`, `radarr_update_custom_format`, `radarr_update_delay_profile` | write |
 | Config | `radarr_add_root_folder`, `radarr_update_naming_config`, `radarr_update_media_management_config` | write |
 | Deletion | `radarr_delete_movie`, `radarr_delete_movie_files`, `radarr_delete_queue_item`, `radarr_delete_queue_items`, `radarr_delete_blocklist_item`, `radarr_delete_tag`, `radarr_delete_quality_profile`, `radarr_delete_custom_format`, `radarr_delete_root_folder`, `radarr_delete_provider` | destructive |
+
+## Fork command receipts
+
+`radarr_list_commands` lists native background command receipts; `radarr_get_command` reads one by its positive `id`. Both are read-only and return only command id, name and status. A completed command is not proof of an import: verify exact-download history and current library files. See [fork configuration](../../FORK.md) for guarded imports and history filters.

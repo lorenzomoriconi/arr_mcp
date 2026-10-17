@@ -16,3 +16,11 @@ misconfigurations:
     paths:
       - "deploy/kubernetes/configmap.yaml"
     statement: ConfigMap holds ${VAR} placeholders; real values live in the Secret.
+
+  # This upstream reference deployment uses the project's official GHCR image,
+  # pinned to its evaluated digest. GHCR is deliberately trusted for this
+  # example; Trivy's default registry list otherwise flags every GHCR image.
+  - id: KSV-0125
+    paths:
+      - "deploy/kubernetes/deployment.yaml"
+    statement: Official upstream GHCR reference image is pinned to its evaluated release digest; fork deployment uses separately selected fork releases.

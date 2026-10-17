@@ -3,8 +3,11 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/GauranshMathur/ARR_MCP/pkg/config"
@@ -14,17 +17,19 @@ import (
 
 // Server wires configured service instances into an MCP server.
 type Server struct {
-	cfg *config.Config
-	log *logger.Logger
-	mcp *mcp.Server
+	imports *importPlans
+	cfg     *config.Config
+	log     *logger.Logger
+	mcp     *mcp.Server
 }
 
 // New builds a server exposing tools for every configured service instance.
 func New(cfg *config.Config, log *logger.Logger) *Server {
 	s := &Server{
-		cfg: cfg,
-		log: log,
-		mcp: mcp.NewServer(&mcp.Implementation{Name: "arr-mcp", Version: Version}, nil),
+		cfg:     cfg,
+		imports: newImportPlans(),
+		log:     log,
+		mcp:     mcp.NewServer(&mcp.Implementation{Name: "arr-mcp", Version: Version}, nil),
 	}
 	registerAll(s)
 	return s
@@ -62,19 +67,47 @@ func (s *Server) RunStdio(ctx context.Context) error {
 	return s.mcp.Run(ctx, &mcp.StdioTransport{})
 }
 
-// RunHTTP serves MCP over Streamable HTTP at /mcp, plus a /health probe.
-func (s *Server) RunHTTP(ctx context.Context, addr string) error {
+// HTTPHandler constructs the HTTP routes with optional bearer authentication.
+// Guarded imports require a token on HTTP even if the operator forgets to set it.
+func (s *Server) HTTPHandler() (http.Handler, error) {
+	token := s.cfg.Server.BearerToken
+	if s.cfg.Imports.Guarded && token == "" {
+		return nil, fmt.Errorf("guarded HTTP requires server.bearerToken; reference a private environment variable")
+	}
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(
-		func(*http.Request) *mcp.Server { return s.mcp }, nil))
+	endpoint := http.Handler(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.mcp }, nil))
+	if token != "" {
+		next := endpoint
+		expected := sha256.Sum256([]byte(token))
+		endpoint = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			auth := r.Header.Get("Authorization")
+			supplied := sha256.Sum256([]byte(strings.TrimPrefix(auth, "Bearer ")))
+			if len(r.Header.Values("Authorization")) != 1 || !strings.HasPrefix(auth, "Bearer ") || subtle.ConstantTimeCompare(supplied[:], expected[:]) != 1 {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="arr-mcp"`)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+	mux.Handle("/mcp", endpoint)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+	return mux, nil
+}
+
+// RunHTTP serves MCP over Streamable HTTP at /mcp, plus a /health probe.
+func (s *Server) RunHTTP(ctx context.Context, addr string) error {
+	handler, err := s.HTTPHandler()
+	if err != nil {
+		return err
+	}
 
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

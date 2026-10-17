@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/GauranshMathur/ARR_MCP/pkg/arr"
 )
@@ -110,9 +111,12 @@ func registerManualImport(s *Server, svc string, spec arr.ServiceSpec, opts libr
 		description: "List the files " + svc + " could import from a folder or a finished download, " +
 			"with the " + opts.noun + " it matched each one to. Give folder, or downloadId from " + svc + "_queue. " +
 			"Imports nothing. Rejections explain why a file cannot be imported as matched; " +
-			"correct it by passing " + idHint + " to " + svc + "_manual_import.",
+			"correct it by passing " + idHint + " to " + svc + "_manual_import. In guarded mode, require downloadId and a target id; return an expiring planId and cleanup warning.",
 		access: AccessRead,
 	}, func(ctx context.Context, c *arr.Client, in ManualImportPreviewArgs) (ManualImportCandidateList, error) {
+		if s.cfg.Imports.Guarded {
+			return s.previewGuardedImport(ctx, c, svc, in)
+		}
 		files, err := arr.ListManualImportCandidates(ctx, c, arr.ManualImportQuery{
 			Folder:              in.Folder,
 			DownloadID:          in.DownloadID,
@@ -128,9 +132,15 @@ func registerManualImport(s *Server, svc string, spec arr.ServiceSpec, opts libr
 		description: "Import specific files into the " + svc + " library, using the paths from " +
 			svc + "_manual_import_preview. Quality and languages are names as the preview reports them, " +
 			"e.g. WEBDL-1080p and English. importMode auto lets the service decide, move moves the files, " +
-			"copy leaves the originals in place.",
+			"copy requests preservation of originals, but native completed-download cleanup may still remove them. In guarded mode pass only planId and acceptCleanup=true; files come from the server preview and mode is fixed to copy.",
 		access: AccessWrite,
 	}, func(ctx context.Context, c *arr.Client, in ManualImportArgs) (arr.CommandResult, error) {
+		if s.cfg.Imports.Guarded {
+			return s.applyGuardedImport(ctx, c, svc, in)
+		}
+		if in.PlanID != "" {
+			return arr.CommandResult{}, fmt.Errorf("planId requires imports.guarded=true")
+		}
 		files := make([]arr.ManualImportFile, 0, len(in.Files))
 		for _, f := range in.Files {
 			file := arr.ManualImportFile{
