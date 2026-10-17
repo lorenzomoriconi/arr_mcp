@@ -1,3 +1,7 @@
+> Fork release process: use [FORK.md](../FORK.md). Maintainers run release-please
+> to create version PRs and publish GitHub releases; merging alone does not publish
+> an image. Upstream automatic-release descriptions below are historical context.
+
 # Development
 
 ```bash

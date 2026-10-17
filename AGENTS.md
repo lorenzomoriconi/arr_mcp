@@ -83,6 +83,14 @@ Keep each branch to its own files where possible: new services get their own `re
 
 ## Releasing
 
+**Fork override:** this checkout uses the maintainer-driven release process in
+[FORK.md](FORK.md), including pinned release-please 17.11.2 with the dotted config
+filename. A maintainer runs `release-pr`, reviews/merges the version PR, then runs
+`github-release`. Actions consumes that published release and builds the image;
+it has no PR-review approval permission. The upstream automatic-release wording
+below is retained for upstream context and does not govern this fork.
+
+
 **Merge with an empty body:**
 
 ```bash

@@ -38,7 +38,7 @@ jobs:
           echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
-          ref: ${{ steps.version.outputs.tag }}
+          ref: refs/tags/${{ steps.version.outputs.tag }}
           fetch-depth: 0
       - name: Require merged release content and matching manifest
         env:
@@ -95,11 +95,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.release.outputs.sha }}
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
-            type=semver,pattern={{major}},value=${{ needs.release.outputs.version }}
-            type=raw,value=latest
 
       # Build one arch first so it can be scanned before anything is published.
       # Pushing first would leave a vulnerable tag publicly pullable for however
