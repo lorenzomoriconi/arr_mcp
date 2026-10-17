@@ -61,9 +61,13 @@ func register[In instanceSelector, Out any](
 	if meta.nonIdempotent {
 		annotations.IdempotentHint = false
 	}
+	description := meta.description
+	if s.cfg.Downloads.Guarded {
+		description += guardedToolNote(meta.name)
+	}
 	mcp.AddTool(s.mcp, &mcp.Tool{
 		Name:        meta.name,
-		Description: meta.description,
+		Description: description,
 		Annotations: annotations,
 		InputSchema: schema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {

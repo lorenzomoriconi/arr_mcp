@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/GauranshMathur/ARR_MCP/pkg/arr"
 	"slices"
+	"strings"
 )
 
 // Guarded deployments retain single-target controls and configured library
@@ -37,12 +38,22 @@ func validateMediaInput(ctx context.Context, c *arr.Client, value any) error {
 		} else if in.SeriesID <= 0 || in.SeasonNumber != nil && *in.SeasonNumber < 0 {
 			return fmt.Errorf("search requires one positive series id and a valid optional season")
 		}
+	case CreateQualityProfileArgs:
+		if !strings.HasPrefix(in.Name, "Hermes - ") || strings.TrimSpace(strings.TrimPrefix(in.Name, "Hermes - ")) == "" {
+			return fmt.Errorf("guarded profiles require the reserved Hermes - name prefix")
+		}
 	case AddSeriesArgs:
+		if len(in.Tags) > 0 || in.SearchNow {
+			return fmt.Errorf("guarded title creation refuses routing tags and searchNow; use a separate explicitly scoped search")
+		}
 		if in.TVDBID <= 0 || in.QualityProfileID <= 0 {
 			return fmt.Errorf("a positive catalogue id and selected quality profile are required")
 		}
 		root = in.RootFolderPath
 	case AddMovieArgs:
+		if len(in.Tags) > 0 || in.SearchNow {
+			return fmt.Errorf("guarded title creation refuses routing tags and searchNow; use a separate explicitly scoped search")
+		}
 		if in.TMDBID <= 0 || in.QualityProfileID <= 0 {
 			return fmt.Errorf("a positive catalogue id and selected quality profile are required")
 		}
@@ -82,6 +93,13 @@ func (s *Server) validateGuardedAction(ctx context.Context, c *arr.Client, servi
 	case UpdateQualityProfileArgs:
 		if in.ID <= 0 {
 			return fmt.Errorf("select one existing unassigned profile")
+		}
+		profile, err := arr.GetQualityProfile(ctx, c, in.ID)
+		if err != nil {
+			return err
+		}
+		if !strings.HasPrefix(profile.Name, "Hermes - ") || in.Name != nil && (!strings.HasPrefix(*in.Name, "Hermes - ") || strings.TrimSpace(strings.TrimPrefix(*in.Name, "Hermes - ")) == "") {
+			return fmt.Errorf("guarded mode only updates reserved Hermes - profiles and refuses renaming into or out of that namespace")
 		}
 		endpoint := "/series"
 		if service == "radarr" {
@@ -139,4 +157,20 @@ func (s *Server) validateGuardedAction(ctx context.Context, c *arr.Client, servi
 		}
 	}
 	return nil
+}
+
+func guardedToolNote(name string) string {
+	switch {
+	case strings.HasSuffix(name, "_update_quality_profile"):
+		return " Guarded mode: only unassigned profiles already named Hermes - ... may be updated; the reserved prefix cannot be removed."
+	case strings.HasSuffix(name, "_create_quality_profile"):
+		return " Guarded mode requires the reserved Hermes - ... name prefix."
+	case name == "sonarr_edit_series" || name == "radarr_edit_movies":
+		return " Guarded mode: assign a quality profile to exactly one existing title; other generic edit fields are refused."
+	case name == "sonarr_add_series" || name == "radarr_add_movie":
+		return " Guarded mode: no tags or searchNow; use an existing native root and a separate explicitly scoped search."
+	case name == "qbittorrent_stop_torrents" || name == "qbittorrent_start_torrents" || name == "qbittorrent_recheck_torrents" || name == "qbittorrent_reannounce_torrents":
+		return " Guarded mode: exactly one hash in a native media-app category; all/bulk selectors are forbidden."
+	}
+	return ""
 }

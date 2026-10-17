@@ -148,9 +148,15 @@ def install(payload):
         raise ValueError('Expected native verified stateless HTTPS MCP')
     if server.get('url') != payload['endpoint']['url'] or not server['url'].startswith('https://'):
         raise ValueError('Native MCP endpoint mismatch')
+    chats = payload['watch_policy'].get('authorized_chats')
+    if not isinstance(chats,list) or not chats or any(not isinstance(chat,str) or not re.fullmatch(r'-?[0-9]+',chat) for chat in chats):
+        raise ValueError('Invalid watch delivery policy')
+    skill_content = base64.b64decode(payload['skill'],validate=True)
+    if not skill_content.strip() or b'__HERMES_PYTHON__' in skill_content:
+        raise ValueError('Unrendered skill interpreter placeholder')
     token, token_info = read_regular(SETTINGS / 'broker.token', 512)
     value = token.decode().strip()
-    if token_info.st_uid != 0 or token_info.st_mode & 0o027 or not re.fullmatch(r'[A-Za-z0-9_-]{32,}', value):
+    if token_info.st_uid != 0 or token_info.st_gid != owner.pw_gid or stat.S_IMODE(token_info.st_mode) != 0o640 or not re.fullmatch(r'[A-Za-z0-9_-]{32,}', value):
         raise RuntimeError('Existing scoped token or permissions are invalid')
     env_text = originals[env][0].decode()
     if re.search(r'^ARR_MCP_HTTP_TOKEN\s*=', env_text, flags=re.M):
@@ -158,7 +164,7 @@ def install(payload):
     changes = {
         config: replace_arr_config(originals[config][0].decode(), server, yaml),
         env: (env_text.rstrip() + '\nARR_MCP_HTTP_TOKEN=' + value + '\n').encode(),
-        skill: base64.b64decode(payload['skill']),
+        skill: skill_content,
         agents: base64.b64decode(payload['agents']),
         HELPERS / 'download_watch.py': base64.b64decode(payload['watch']),
         HELPERS / 'native_client.py': base64.b64decode(payload['native_client']),
@@ -214,12 +220,31 @@ def install(payload):
     # The gateway can finish writing between the idle check and stop. Recheck
     # the snapshot now; refuse concurrent edits before touching any target.
     for path, (raw, _) in originals.items():
+        if path == cache:
+            continue
         current, _ = read_regular(path)
         if sha(current) != sha(raw):
             raise RuntimeError('Live configuration changed after gateway stop; inspect the backup before continuing')
-    trusted_folder(HELPERS, 0o755)
-    trusted_folder(SETTINGS, 0o750, owner.pw_gid)
+    # Cache contents may change during shutdown. Preserve that latest snapshot
+    # and invalidate only arr, rather than dropping unrelated late discoveries.
+    index, item = next((i,item) for i,item in enumerate(manifest['files']) if item['path'] == str(cache))
     try:
+        latest, info = read_regular(cache)
+    except FileNotFoundError:
+        data = {}
+        item['before'] = None
+    else:
+        data = json.loads(latest)
+        name = str(index) + '.before'
+        write_atomic(backup / name,latest,0o600,0,0)
+        item.update(before=name,mode=stat.S_IMODE(info.st_mode),uid=info.st_uid,gid=info.st_gid)
+    data.pop('arr',None)
+    changes[cache] = (json.dumps(data) + '\n').encode()
+    item['after_sha'] = sha(changes[cache])
+    write_atomic(backup / 'manifest.json',json.dumps(manifest).encode(),0o600,0,0)
+    try:
+        trusted_folder(HELPERS, 0o755)
+        trusted_folder(SETTINGS, 0o750, owner.pw_gid)
         for item in manifest['files']:
             path = Path(item['path'])
             data = changes[path]
@@ -230,20 +255,13 @@ def install(payload):
                 mode, uid, gid = 0o600, owner.pw_uid, owner.pw_gid
             write_atomic(path,data,mode,uid,gid)
     except BaseException:
-        rollback(str(backup), start=False)
+        rollback(str(backup), start=False, gateway_stopped=True)
         raise
     print(json.dumps({'prepared':True,'gateway':'stopped','backup':str(backup),'files':len(changes)}))
     return str(backup)
 
 
-def rollback(backup_path, start=True):
-    backup = Path(backup_path)
-    if backup.parent != BACKUPS or not backup.name.startswith('native-'):
-        raise ValueError('Unexpected native-MCP backup path')
-    raw, info = read_regular(backup / 'manifest.json')
-    if info.st_uid != 0 or info.st_mode & 0o077:
-        raise RuntimeError('Untrusted rollback manifest')
-    manifest = json.loads(raw)
+def verify_rollback_files(backup, manifest):
     # Refuse to overwrite edits made after this immediate-cutover snapshot.
     for item in manifest['files']:
         if item.get('disposable'):
@@ -259,8 +277,21 @@ def rollback(backup_path, start=True):
             allowed.add(sha(previous))
         if sha(current) not in allowed:
             raise RuntimeError('Installation file changed after cutover; merge before rollback')
-    assert_idle(Path(manifest['home']))
-    subprocess.run(['systemctl','stop',SERVICE], check=True, capture_output=True)
+
+
+def rollback(backup_path, start=True, gateway_stopped=False):
+    backup = Path(backup_path)
+    if backup.parent != BACKUPS or not backup.name.startswith('native-'):
+        raise ValueError('Unexpected native-MCP backup path')
+    raw, info = read_regular(backup / 'manifest.json')
+    if info.st_uid != 0 or info.st_mode & 0o077:
+        raise RuntimeError('Untrusted rollback manifest')
+    manifest = json.loads(raw)
+    verify_rollback_files(backup,manifest)
+    if not gateway_stopped:
+        assert_idle(Path(manifest['home']))
+        subprocess.run(['systemctl','stop',SERVICE], check=True, capture_output=True)
+    verify_rollback_files(backup,manifest)
     for item in manifest['files']:
         path = Path(item['path'])
         if item['before'] is not None:

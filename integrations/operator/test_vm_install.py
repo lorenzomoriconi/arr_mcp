@@ -45,6 +45,7 @@ class NativeInstallRollbackTests(unittest.TestCase):
         self.hosts.write_text('127.0.0.1 localhost\n')
         (self.settings / 'broker.token').write_text('a' * 64)
         (self.settings / 'broker.token').chmod(0o640)
+        os.chown(self.settings / 'broker.token',0,1234)
         self.paths = {
             self.home / 'config.yaml': b'model: unchanged\nmcp_servers:\n  arr:\n    command: old-client\n',
             self.home / '.env': b'EXISTING=keep\n',
@@ -56,7 +57,7 @@ class NativeInstallRollbackTests(unittest.TestCase):
         (self.settings / 'endpoint.json').write_text('{"url":"https://old.invalid/rpc","address":"192.0.2.2"}')
         with sqlite3.connect(self.home / 'state.db') as connection:
             connection.execute('CREATE TABLE session_turn_leases (expires_at REAL)')
-        owner = SimpleNamespace(pw_dir=str(self.user_home), pw_uid=0, pw_gid=0)
+        owner = SimpleNamespace(pw_dir=str(self.user_home), pw_uid=0, pw_gid=1234)
         self.patchers = [patch.object(vm_install,name,value,create=True) for name,value in [('SETTINGS',self.settings),('HELPERS',self.helpers),('BACKUPS',self.backups),('HOSTS',self.hosts)]]
         self.patchers += [patch('pwd.getpwnam',return_value=owner), patch.object(vm_install.subprocess,'run')]
         for patcher in self.patchers:patcher.start();self.addCleanup(patcher.stop)
@@ -66,7 +67,7 @@ class NativeInstallRollbackTests(unittest.TestCase):
             'server':{'url':'https://new.invalid/rpc','ssl_verify':'/etc/ssl/certs/ca-certificates.crt','protocol':'stateless'},
             'endpoint':{'url':'https://new.invalid/rpc','address':'192.0.2.1'},
             'skill':encode(b'new skill'),'agents':encode(b'new instructions'),
-            'watch':encode(b'new watch'),'native_client':encode(b'new client'),'watch_policy':{'chats':[]}}
+            'watch':encode(b'new watch'),'native_client':encode(b'new client'),'watch_policy':{'authorized_chats':['123']}}
 
     def test_install_tracks_endpoint_and_rollback_handles_gateway_cache_rewrite(self):
         before_endpoint = (self.settings / 'endpoint.json').read_bytes()
@@ -77,6 +78,7 @@ class NativeInstallRollbackTests(unittest.TestCase):
         for path, raw in self.paths.items():self.assertEqual(path.read_bytes(),raw)
         self.assertEqual((self.settings / 'endpoint.json').read_bytes(),before_endpoint)
         self.assertEqual(self.settings.stat().st_mode & 0o777,0o751)
+        self.assertEqual(self.settings.stat().st_gid,0)
         self.assertFalse((self.helpers / 'native_client.py').exists())
 
     def test_rollback_preserves_later_operator_edits(self):
@@ -100,3 +102,33 @@ class NativeInstallRollbackTests(unittest.TestCase):
         cache.write_text('{"arr":{"rebuilt":true}}')
         vm_install.rollback(backup,start=False)
         self.assertFalse(cache.exists())
+
+
+    def test_cache_written_during_stop_is_retained_except_arr(self):
+        cache=self.home / 'cache/mcp_schema_cache.json'
+        def stop_gateway(*args,**kwargs):
+            if args[0][1] == 'stop':cache.write_text('{"arr":{"late":true},"other":{"late":true}}')
+        vm_install.subprocess.run.side_effect=stop_gateway
+        backup=vm_install.install(self.payload)
+        self.assertEqual(json.loads(cache.read_text()),{'other':{'late':True}})
+        vm_install.subprocess.run.side_effect=None
+        vm_install.rollback(backup,start=False)
+        self.assertEqual(json.loads(cache.read_text()),{'arr':{'late':True},'other':{'late':True}})
+
+    def test_rollback_preserves_configuration_written_during_stop(self):
+        backup=vm_install.install(self.payload)
+        def stop_gateway(*args,**kwargs):
+            if args[0][1] == 'stop':(self.workspace / 'AGENTS.md').write_text('shutdown edit')
+        vm_install.subprocess.run.side_effect=stop_gateway
+        with self.assertRaisesRegex(RuntimeError,'changed after cutover'):vm_install.rollback(backup,start=False)
+        self.assertEqual((self.workspace / 'AGENTS.md').read_text(),'shutdown edit')
+
+    def test_invalid_watch_policy_is_refused_before_stopping(self):
+        self.payload['watch_policy']={'chats':[]}
+        with self.assertRaisesRegex(ValueError,'watch'):vm_install.install(self.payload)
+        vm_install.subprocess.run.assert_not_called()
+
+    def test_unrendered_skill_is_refused_before_stopping(self):
+        self.payload['skill']=base64.b64encode(b'__HERMES_PYTHON__ /opt/helper.py').decode()
+        with self.assertRaisesRegex(ValueError,'placeholder'):vm_install.install(self.payload)
+        vm_install.subprocess.run.assert_not_called()

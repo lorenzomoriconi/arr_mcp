@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/GauranshMathur/ARR_MCP/pkg/arr"
 	"strings"
 	"testing"
 )
@@ -18,6 +19,25 @@ func TestGuardedMediaRefusesBulkOrUnscopedActions(t *testing.T) {
 		}
 	}
 	if err := validateMediaInput(context.Background(), nil, TorrentHashesArgs{Hashes: []string{strings.Repeat("a", 40)}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGuardedAddsRefuseRoutingTagsOrImplicitSearch(t *testing.T) {
+	f, _ := mediaFixture(t)
+	client := arr.NewClient(f.baseURL, arr.SonarrSpec, arr.Credentials{APIKey: "fixture"})
+	for _, value := range []any{
+		AddSeriesArgs{TVDBID: 1, QualityProfileID: 1, RootFolderPath: "/library", Monitor: "none", Tags: []int{1}},
+		AddMovieArgs{TMDBID: 1, QualityProfileID: 1, RootFolderPath: "/library", Tags: []int{1}},
+		AddSeriesArgs{TVDBID: 1, QualityProfileID: 1, RootFolderPath: "/library", Monitor: "none", SearchNow: true},
+		AddMovieArgs{TMDBID: 1, QualityProfileID: 1, RootFolderPath: "/library", SearchNow: true},
+		CreateQualityProfileArgs{Name: "Operator preset"},
+	} {
+		if err := validateMediaInput(context.Background(), client, value); err == nil {
+			t.Fatalf("unsafe add/profile creation accepted: %+v", value)
+		}
+	}
+	if err := validateMediaInput(context.Background(), client, AddSeriesArgs{TVDBID: 1, QualityProfileID: 1, RootFolderPath: "/library", Monitor: "none"}); err != nil {
 		t.Fatal(err)
 	}
 }

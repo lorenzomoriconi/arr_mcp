@@ -17,20 +17,21 @@ import (
 )
 
 type guardedMediaFixture struct {
-	mu            sync.Mutex
-	baseURL       string
-	present       bool
-	addPosts      int
-	importPosts   int
-	wrongTarget   bool
-	existingFile  bool
-	incomplete    bool
-	overlaps      bool
-	wrongCategory bool
-	sourceChanged bool
-	profileName   string
-	malformedAck  bool
-	failPost      bool
+	mu                sync.Mutex
+	baseURL           string
+	present           bool
+	addPosts          int
+	importPosts       int
+	wrongTarget       bool
+	existingFile      bool
+	incomplete        bool
+	overlaps          bool
+	wrongCategory     bool
+	sourceChanged     bool
+	profileName       string
+	profileUnassigned bool
+	malformedAck      bool
+	failPost          bool
 }
 
 func mediaFixture(t *testing.T) (*guardedMediaFixture, *mcp.ClientSession) {
@@ -45,6 +46,9 @@ func mediaFixture(t *testing.T) (*guardedMediaFixture, *mcp.ClientSession) {
 		switch r.URL.Path {
 		case "/api/v3/series", "/api/v3/movie":
 			body = []any{map[string]any{"id": 1, "qualityProfileId": 1}}
+			if f.profileUnassigned {
+				body = []any{}
+			}
 		case "/api/v3/series/1", "/api/v3/movie/1":
 			body = map[string]any{"id": 1, "title": "Example", "path": "/library/example", "qualityProfileId": 1, "hasFile": f.existingFile, "seasons": []any{map[string]any{"seasonNumber": 1}}}
 		case "/api/v3/parse":
@@ -179,6 +183,7 @@ func mediaFixture(t *testing.T) (*guardedMediaFixture, *mcp.ClientSession) {
 	t.Cleanup(srv.Close)
 	cfg := cfgWith(map[string][]config.Instance{
 		"sonarr":      {{Name: "main", URL: srv.URL, APIKey: "fixture"}},
+		"radarr":      {{Name: "main", URL: srv.URL, APIKey: "fixture"}},
 		"qbittorrent": {{Name: "main", URL: srv.URL, AuthBypass: true}},
 	}, permsFull)
 	cfg.Downloads.Client = "main"
@@ -309,6 +314,7 @@ func TestGuardedImportManifestAndOverlapAreRechecked(t *testing.T) {
 
 func TestGuardedProfileCannotChangeAssignedLibraryPreset(t *testing.T) {
 	f, session := mediaFixture(t)
+	f.profileName = "Hermes - Separate"
 	mediaCall(t, session, "sonarr_update_quality_profile", map[string]any{"id": 1, "name": "Unexpected global edit"}, false)
 	if f.addPosts != 0 {
 		t.Fatal("assigned shared profile was changed")
@@ -330,5 +336,33 @@ func TestGuardedTorrentControlsStayInNativeMediaCategory(t *testing.T) {
 				t.Fatal("wrong-category control reached native backend")
 			}
 		})
+	}
+}
+
+func TestGuardedProfileUpdatesRequireReservedSeparateName(t *testing.T) {
+	for _, app := range []string{"sonarr", "radarr"} {
+		for _, tc := range []struct {
+			name, current, next string
+			unassigned, success bool
+		}{
+			{"operator preset", "Existing preset", "Hermes - Claimed", true, false},
+			{"reserved separate", "Hermes - Separate", "Hermes - Adjusted", true, true},
+			{"assigned reserved", "Hermes - Separate", "Hermes - Adjusted", false, false},
+			{"rename out", "Hermes - Separate", "Existing preset", true, false},
+		} {
+			t.Run(app+"/"+tc.name, func(t *testing.T) {
+				f, session := mediaFixture(t)
+				f.profileName = tc.current
+				f.profileUnassigned = tc.unassigned
+				mediaCall(t, session, app+"_update_quality_profile", map[string]any{"id": 1, "name": tc.next}, tc.success)
+				expected := 0
+				if tc.success {
+					expected = 1
+				}
+				if f.addPosts != expected {
+					t.Fatal("profile update crossed reserved boundary")
+				}
+			})
+		}
 	}
 }
