@@ -2,6 +2,7 @@ package arr
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -169,7 +170,16 @@ func ListHistoryPage(ctx context.Context, c *Client, in HistoryQuery) (HistoryPa
 	}
 	q := Query{"page": itoa(in.Page), "pageSize": itoa(in.Limit), "sortKey": "date", "sortDirection": "descending"}
 	if in.DownloadID != "" {
-		q["downloadId"] = in.DownloadID
+		downloadID := in.DownloadID
+		// The native media apps store BitTorrent download IDs as uppercase
+		// hex, while qBittorrent returns lowercase hashes. Their exact history
+		// filter is case-sensitive. Opaque/non-hash IDs retain their spelling.
+		if (c.spec.Name == "sonarr" || c.spec.Name == "radarr") && (len(downloadID) == 40 || len(downloadID) == 64) {
+			if _, err := hex.DecodeString(downloadID); err == nil {
+				downloadID = strings.ToUpper(downloadID)
+			}
+		}
+		q["downloadId"] = downloadID
 	}
 	if in.SeriesID > 0 || in.EpisodeID > 0 {
 		if c.spec.Name != "sonarr" {
