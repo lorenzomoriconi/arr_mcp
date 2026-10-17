@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.14.0](https://github.com/lorenzomoriconi/arr_mcp/compare/arr_mcp/v1.13.1...arr_mcp/v1.14.0) (2026-10-17)
+
+
+### Features
+
+* add guarded Hermes integration options ([ab24499](https://github.com/lorenzomoriconi/arr_mcp/commit/ab24499d37d705cce2a5917c40f4b584725f7a80))
+
+
+### Bug Fixes
+
+* close reviewed import and release gaps ([92b4393](https://github.com/lorenzomoriconi/arr_mcp/commit/92b4393b5691c4d6564dfec9ab93bb8faa2c2b50))
+
 ## [1.13.1](https://github.com/GauranshMathur/ARR_MCP/compare/v1.13.0...v1.13.1) (2026-10-12)
 
 
