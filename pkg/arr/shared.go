@@ -37,23 +37,42 @@ type QueueItem struct {
 	ErrorMessage   string `json:"errorMessage,omitempty"`
 }
 
+// HistoryData keeps import verification evidence without exposing arbitrary
+// upstream history data (which can include authenticated download URLs).
+type HistoryData struct {
+	FileID       string `json:"fileId,omitempty"`
+	DroppedPath  string `json:"droppedPath,omitempty"`
+	ImportedPath string `json:"importedPath,omitempty"`
+}
+
 // HistoryRecord is a past grab, import, or failure.
 type HistoryRecord struct {
-	ID          int    `json:"id"`
-	EventType   string `json:"eventType,omitempty"`
-	Date        string `json:"date,omitempty"`
-	SourceTitle string `json:"sourceTitle,omitempty"`
+	ID          int         `json:"id"`
+	EventType   string      `json:"eventType,omitempty"`
+	Date        string      `json:"date,omitempty"`
+	SourceTitle string      `json:"sourceTitle,omitempty"`
+	DownloadID  string      `json:"downloadId,omitempty"`
+	EpisodeID   int         `json:"episodeId,omitempty"`
+	SeriesID    int         `json:"seriesId,omitempty"`
+	MovieID     int         `json:"movieId,omitempty"`
+	Data        HistoryData `json:"data,omitzero"`
 }
 
 // CommandResult reports the outcome of triggering a background command.
 type CommandResult struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status,omitempty"`
+	Queued  string `json:"queued,omitempty"`
+	Started string `json:"started,omitempty"`
+	Ended   string `json:"ended,omitempty"`
+	Result  string `json:"result,omitempty"`
+	Message string `json:"message,omitempty"`
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Status  string `json:"status,omitempty"`
 }
 
 // Episode is the trimmed view of a Sonarr episode.
 type Episode struct {
+	EpisodeFileID int    `json:"episodeFileId,omitempty"`
 	ID            int    `json:"id"`
 	SeriesID      int    `json:"seriesId"`
 	Title         string `json:"title"`
@@ -107,18 +126,65 @@ func ListQueue(ctx context.Context, c *Client, pageSize int) ([]QueueItem, error
 
 // ListHistory returns recent grab, import and failure events.
 func ListHistory(ctx context.Context, c *Client, pageSize int) ([]HistoryRecord, error) {
-	if pageSize <= 0 {
-		pageSize = 20
+	page, err := ListHistoryPage(ctx, c, HistoryQuery{Limit: pageSize})
+	return page.Records, err
+}
+
+// HistoryQuery selects a bounded page and optional download/media scope.
+type HistoryQuery struct {
+	Page       int
+	Limit      int
+	DownloadID string
+	SeriesID   int
+	EpisodeID  int
+	MovieID    int
+}
+
+// HistoryPage retains pagination metadata so callers can verify a whole pack.
+type HistoryPage struct {
+	Records  []HistoryRecord `json:"records"`
+	Page     int             `json:"page"`
+	PageSize int             `json:"pageSize"`
+	Total    int             `json:"total"`
+}
+
+// ListHistoryPage lists import/grab events with the native API's filters.
+func ListHistoryPage(ctx context.Context, c *Client, in HistoryQuery) (HistoryPage, error) {
+	if in.Page < 0 || in.Limit < 0 || in.Limit > 1000 || in.SeriesID < 0 || in.EpisodeID < 0 || in.MovieID < 0 {
+		return HistoryPage{}, fmt.Errorf("history requires page >= 1 and limit between 1 and 1000 (zero uses defaults), with positive media ids")
 	}
-	env, err := GetJSON[paged[HistoryRecord]](ctx, c, "/history", Query{
-		"pageSize":      strconv.Itoa(pageSize),
-		"sortKey":       "date",
-		"sortDirection": "descending",
-	})
+	if in.Page == 0 {
+		in.Page = 1
+	}
+	if in.Limit == 0 {
+		in.Limit = 20
+	}
+	q := Query{"page": itoa(in.Page), "pageSize": itoa(in.Limit), "sortKey": "date", "sortDirection": "descending"}
+	if in.DownloadID != "" {
+		q["downloadId"] = in.DownloadID
+	}
+	if in.SeriesID > 0 || in.EpisodeID > 0 {
+		if c.spec.Name != "sonarr" {
+			return HistoryPage{}, fmt.Errorf("seriesId and episodeId are Sonarr-only history filters")
+		}
+		if in.SeriesID > 0 {
+			q["seriesIds"] = itoa(in.SeriesID)
+		}
+		if in.EpisodeID > 0 {
+			q["episodeId"] = itoa(in.EpisodeID)
+		}
+	}
+	if in.MovieID > 0 {
+		if c.spec.Name != "radarr" {
+			return HistoryPage{}, fmt.Errorf("movieId is a Radarr-only history filter")
+		}
+		q["movieIds"] = itoa(in.MovieID)
+	}
+	env, err := GetJSON[paged[HistoryRecord]](ctx, c, "/history", q)
 	if err != nil {
-		return nil, err
+		return HistoryPage{}, err
 	}
-	return env.Records, nil
+	return HistoryPage{Records: env.Records, Page: in.Page, PageSize: in.Limit, Total: env.TotalRecords}, nil
 }
 
 // DeleteQueueItem removes a download from the queue, optionally telling the
@@ -588,6 +654,7 @@ func ListQualityDefinitions(ctx context.Context, c *Client) ([]QualityDefinition
 // afford. SeasonNumber is a pointer because season 0 is specials and would
 // otherwise be indistinguishable from "no season".
 type MediaFile struct {
+	Path                string   `json:"path,omitempty"`
 	ID                  int      `json:"id"`
 	SeriesID            int      `json:"seriesId,omitempty"`
 	MovieID             int      `json:"movieId,omitempty"`
@@ -605,6 +672,7 @@ type MediaFile struct {
 // rawMediaFile mirrors the upstream episode and movie file resources. mediaInfo
 // and customFormats are absent by design rather than decoded and discarded.
 type rawMediaFile struct {
+	Path         string `json:"path"`
 	ID           int    `json:"id"`
 	SeriesID     int    `json:"seriesId"`
 	MovieID      int    `json:"movieId"`
@@ -634,7 +702,7 @@ func (r rawMediaFile) toMediaFile() MediaFile {
 		languages = nil
 	}
 	return MediaFile{
-		ID: r.ID, SeriesID: r.SeriesID, MovieID: r.MovieID,
+		Path: r.Path, ID: r.ID, SeriesID: r.SeriesID, MovieID: r.MovieID,
 		SeasonNumber: r.SeasonNumber, RelativePath: r.RelativePath,
 		Size: r.Size, DateAdded: r.DateAdded,
 		Quality: r.Quality.Quality.Name, ReleaseGroup: r.ReleaseGroup,

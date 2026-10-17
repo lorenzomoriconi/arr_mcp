@@ -8,3 +8,9 @@ docker-compose.yml
 .env
 .env.example
 arr-mcp
+
+.worktrees
+.claude
+*.local.*
+*.env.local
+config.yaml

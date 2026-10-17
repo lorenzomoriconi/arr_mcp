@@ -27,6 +27,8 @@ type Instance struct {
 
 // Config is the fully resolved server configuration.
 type Config struct {
+	Tools       ToolPolicy            `yaml:"tools"`
+	Imports     ImportPolicy          `yaml:"imports"`
 	Server      ServerConfig          `yaml:"server"`
 	Permissions Permissions           `yaml:"permissions"`
 	Services    map[string][]Instance `yaml:"services"`

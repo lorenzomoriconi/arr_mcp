@@ -19,3 +19,7 @@
 | Profiles | `sonarr_create_quality_profile`, `sonarr_update_quality_profile`, `sonarr_create_custom_format`, `sonarr_update_custom_format`, `sonarr_create_release_profile`, `sonarr_update_release_profile`, `sonarr_update_delay_profile` | write |
 | Config | `sonarr_add_root_folder`, `sonarr_update_naming_config`, `sonarr_update_media_management_config` | write |
 | Deletion | `sonarr_delete_series`, `sonarr_delete_episode_files`, `sonarr_delete_queue_item`, `sonarr_delete_queue_items`, `sonarr_delete_blocklist_item`, `sonarr_delete_tag`, `sonarr_delete_quality_profile`, `sonarr_delete_custom_format`, `sonarr_delete_release_profile`, `sonarr_delete_root_folder`, `sonarr_delete_provider` | destructive |
+
+## Fork command receipts
+
+`sonarr_list_commands` lists native background command receipts; `sonarr_get_command` reads one by its positive `id`. Both are read-only and return command id, name, status, queued/started/ended times, result and message. A completed command is not proof of an import: verify exact-download history and current library files. See [fork configuration](../../FORK.md) for guarded imports and history filters.

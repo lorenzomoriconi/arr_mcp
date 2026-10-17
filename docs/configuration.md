@@ -169,3 +169,7 @@ makes the Docker healthcheck work.
 Flags override the config file, and every flag except `--config` has a config-file
 equivalent under `server:`. `--check` exits non-zero if any instance fails, so it works in
 a healthcheck or a CI step as well as by hand.
+
+## Fork extensions
+
+This fork adds `tools.allow`, `tools.deny`, `tools.denyDestructive`, `imports.guarded`, and `server.bearerToken`. See [fork configuration and limits](../FORK.md) and the [sanitized Hermes example](../config.hermes.example.yaml). Unknown configuration keys and unknown tool names fail startup. The upstream defaults and the fork's deliberate response/validation changes are described there.

@@ -1,9 +1,14 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing fork release tag, for example arr_mcp/v1.14.0
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,45 +17,55 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  release-please:
-    name: Maintain release PR
+  release:
+    name: Resolve release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: write
     outputs:
-      released: ${{ steps.release.outputs.release_created }}
-      tag: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
-      # Accumulates conventional commits into a version-bump PR. Merging that PR
-      # makes this same run tag the release, which the publish job below picks up.
-      - uses: googleapis/release-please-action@v4
-        id: release
-        with:
-          config-file: .release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-      # A PR opened with GITHUB_TOKEN gets its pull_request runs held for
-      # approval, so its checks never start. workflow_dispatch is exempt from
-      # that rule, and a run on the PR's branch reports on the PR.
-      - name: Run checks on the release PR
-        if: steps.release.outputs.prs_created == 'true'
+      - name: Validate fork release tag
+        id: version
         env:
-          GH_TOKEN: ${{ github.token }}
-          # Parsed in the shell: env is evaluated even when the step is
-          # skipped, and fromJSON fails on the empty output of a run with no PR.
-          PR: ${{ steps.release.outputs.pr }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          branch=$(jq -r '.headBranchName' <<<"$PR")
-          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
-          gh workflow run security.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+          if [[ ! "$RELEASE_TAG" =~ ^arr_mcp/v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo 'Expected a stable fork tag such as arr_mcp/v1.14.0' >&2
+            exit 1
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.version.outputs.tag }}
+          fetch-depth: 0
+      - name: Require merged release content and matching manifest
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo 'Release commit must be reachable from main' >&2
+            exit 1
+          fi
+          if [ "$(jq -r '.["."]' .release-please-manifest.json)" != "$RELEASE_VERSION" ]; then
+            echo 'Release tag and version manifest disagree' >&2
+            exit 1
+          fi
+      - name: Pin the release commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  verify-release:
+    name: Verify release
+    needs: release
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.release.outputs.sha }}
 
   publish:
     name: Build, scan, publish
-    needs: release-please
-    if: needs.release-please.outputs.released == 'true'
+    needs: [release, verify-release]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,11 +74,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag }}
+          ref: ${{ needs.release.outputs.sha }}
 
       - name: Normalise image name
         id: img
-        run: echo "name=$(echo '${{ github.repository_owner }}/arr-mcp' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+        run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -80,11 +95,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.release.outputs.sha }}
           tags: |
-            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag }}
-            type=semver,pattern={{major}},value=${{ needs.release-please.outputs.tag }}
-            type=raw,value=latest
+            type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
 
       # Build one arch first so it can be scanned before anything is published.
       # Pushing first would leave a vulnerable tag publicly pullable for however
@@ -96,13 +110,13 @@ jobs:
           platforms: linux/amd64
           push: false
           load: true
-          tags: scan-target:${{ needs.release-please.outputs.tag }}
-          build-args: VERSION=${{ needs.release-please.outputs.tag }}
+          tags: scan-target:${{ needs.release.outputs.version }}
+          build-args: VERSION=v${{ needs.release.outputs.version }}
 
       - name: Trivy scan (gate)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: scan-target:${{ needs.release-please.outputs.tag }}
+          image-ref: scan-target:${{ needs.release.outputs.version }}
           format: table
           exit-code: "1"
           ignore-unfixed: true
@@ -112,7 +126,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: scan-target:${{ needs.release-please.outputs.tag }}
+          image-ref: scan-target:${{ needs.release.outputs.version }}
           format: sarif
           output: trivy-image.sarif
           ignore-unfixed: true
@@ -133,14 +147,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ needs.release-please.outputs.tag }}
+          build-args: VERSION=v${{ needs.release.outputs.version }}
           provenance: true
           sbom: true
 
       - name: Summary
         run: |
           {
-            echo "### Published ${{ needs.release-please.outputs.tag }}"
+            echo "### Published ${{ needs.release.outputs.tag }}"
             echo
             echo '```'
             echo "${{ steps.meta.outputs.tags }}"

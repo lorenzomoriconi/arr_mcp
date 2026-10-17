@@ -331,6 +331,13 @@ var importModes = []string{"auto", "move", "copy"}
 // only reprocesses candidates and returns updated rows, so posting there would
 // report success and leave every file exactly where it was.
 func ManualImport(ctx context.Context, c *Client, files []ManualImportFile, importMode string) (CommandResult, error) {
+	return ManualImportChecked(ctx, c, files, importMode, nil)
+}
+
+// ManualImportChecked runs beforeSubmit after read-only metadata resolution and
+// immediately before POST. It lets a server consume and expire a guarded plan
+// without spending it on a quality/language lookup failure.
+func ManualImportChecked(ctx context.Context, c *Client, files []ManualImportFile, importMode string, beforeSubmit func() error) (CommandResult, error) {
 	if len(files) == 0 {
 		return CommandResult{}, fmt.Errorf("no files given; pass paths from the manual_import_preview tool")
 	}
@@ -387,6 +394,11 @@ func ManualImport(ctx context.Context, c *Client, files []ManualImportFile, impo
 		payload = append(payload, entry)
 	}
 
+	if beforeSubmit != nil {
+		if err := beforeSubmit(); err != nil {
+			return CommandResult{}, err
+		}
+	}
 	return RunCommand(ctx, c, "ManualImport", map[string]any{
 		"files": payload, "importMode": mode,
 	})

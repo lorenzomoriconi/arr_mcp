@@ -2,8 +2,8 @@
 
 | Service | Tools |
 |---|---|
-| [Sonarr](sonarr.md) | 77 |
-| [Radarr](radarr.md) | 73 |
+| [Sonarr](sonarr.md) | 79 |
+| [Radarr](radarr.md) | 75 |
 | [Bazarr](bazarr.md) | 33 |
 | [Prowlarr](prowlarr.md) | 23 |
 | [qBittorrent](qbittorrent.md) | 22 |
