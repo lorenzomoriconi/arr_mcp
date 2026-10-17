@@ -24,3 +24,10 @@ Require exact proxy peers, verified TLS, private scoped token, explicit guarded/
 ## Remaining limits
 
 Approval-message details and argument binding in the upstream confirmation implementation are not production guarantees; this Hermes deployment does not use confirm mode. Native writers can race validation, in-memory plans reset on restart, and no media mount permits independent symlink inspection. The short post-submit hold can temporarily delay watch creation until the native queue sees a new torrent. Large queue scans are bounded and fail closed. Hermes internal SDK/cron helpers need compatibility checks after an upgrade. Separate read-only tokens and a separate terminal identity remain a distinct future isolation project.
+
+
+## Final verification
+
+The focused final review closed S1–S5 and found no code blocker. Its requested cleanup/rollback, reserved-namespace and monitoring-scope notes are included in the public runbook/skill. The exact code at 0d1e0ed passed full Go race/vet/lint/gosec/actionlint and GitHub CI; 27 deterministic watch tests and 11 operator tests passed. A fresh ARM build passed the actual installed Hermes native connection task and tool-call handler against a fake backend, with one fake POST, zero real media writes and zero Telegram messages. Subsequent source changes only record this review and clarify documentation; final PR CI gates the merged commit.
+
+All three reviews used actual Claude Code `claude-opus-5-5` with `--effort xhigh`, `--permission-mode plan --restricted`, empty strict MCP config, disabled hooks, and Read/Grep/Glob only. CLI results reported `is_error=false` and canonical model `claude-opus-5-5`, provider `firstParty`. They had no production credentials or private runtime definitions.
