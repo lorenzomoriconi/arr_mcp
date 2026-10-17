@@ -45,10 +45,10 @@ func TestToolPolicyCannotBeWidenedByInstancePermissions(t *testing.T) {
 }
 
 func TestHermesExampleOnlyNamesExistingTools(t *testing.T) {
-	for _, name := range []string{"SONARR_URL", "RADARR_URL", "QBITTORRENT_URL"} {
+	for _, name := range []string{"SONARR_URL", "RADARR_URL", "QBITTORRENT_URL", "PROWLARR_URL"} {
 		t.Setenv(name, "http://example.invalid")
 	}
-	for _, name := range []string{"SONARR_API_KEY", "RADARR_API_KEY", "QBITTORRENT_USERNAME", "QBITTORRENT_PASSWORD", "ARR_MCP_HTTP_TOKEN"} {
+	for _, name := range []string{"SONARR_API_KEY", "RADARR_API_KEY", "PROWLARR_API_KEY", "QBITTORRENT_USERNAME", "QBITTORRENT_PASSWORD", "ARR_MCP_HTTP_TOKEN"} {
 		t.Setenv(name, "fixture-value")
 	}
 	cfg, err := config.Load("../../config.hermes.example.yaml")

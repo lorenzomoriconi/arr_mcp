@@ -3,7 +3,9 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"net/netip"
 	"os"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -88,10 +90,14 @@ type Permissions struct {
 
 // ServerConfig holds transport and logging settings.
 type ServerConfig struct {
-	Transport   string `yaml:"transport"`
-	Addr        string `yaml:"addr"`
-	LogLevel    string `yaml:"logLevel"`
-	BearerToken string `yaml:"bearerToken"`
+	Path         string   `yaml:"path"`
+	Stateless    bool     `yaml:"stateless"`
+	JSONResponse bool     `yaml:"jsonResponse"`
+	AllowedPeers []string `yaml:"allowedPeers"`
+	Transport    string   `yaml:"transport"`
+	Addr         string   `yaml:"addr"`
+	LogLevel     string   `yaml:"logLevel"`
+	BearerToken  string   `yaml:"bearerToken"`
 }
 
 var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
@@ -218,6 +224,23 @@ func (c *Config) expand() error {
 
 // validate rejects configuration that would fail confusingly at request time.
 func (c *Config) validate() error {
+	if c.Downloads.Guarded && c.Downloads.Client == "" {
+		return fmt.Errorf("downloads.guarded requires downloads.client for independent native download binding")
+	}
+	if c.Downloads.Client != "" {
+		if _, err := c.Resolve("qbittorrent", c.Downloads.Client); err != nil {
+			return fmt.Errorf("downloads.client: %w", err)
+		}
+	}
+
+	if c.Server.Path != "" && (c.Server.Path == "/" || c.Server.Path == "/health" || !strings.HasPrefix(c.Server.Path, "/") || strings.HasPrefix(c.Server.Path, "//") || strings.HasSuffix(c.Server.Path, "/") || path.Clean(c.Server.Path) != c.Server.Path || strings.ContainsAny(c.Server.Path, "?#%\\\r\n\x00")) {
+		return fmt.Errorf("server.path must be an exact absolute endpoint path other than /health")
+	}
+	for _, peer := range c.Server.AllowedPeers {
+		if _, err := netip.ParsePrefix(peer); err != nil {
+			return fmt.Errorf("server.allowedPeers requires IP CIDR prefixes: %w", err)
+		}
+	}
 	if err := c.Tools.validate(); err != nil {
 		return err
 	}
@@ -292,6 +315,12 @@ func (c *Config) validate() error {
 // authenticates with, and none of the other kind. A key on a username/password
 // service would otherwise be silently ignored and fail later as a 401.
 func validateCredentials(svc string, inst *Instance) error {
+	if inst.AuthBypass {
+		if svc != "qbittorrent" || inst.Username != "" || inst.Password != "" || inst.APIKey != "" {
+			return fmt.Errorf("authBypass is only supported for qBittorrent without credentials")
+		}
+		return nil
+	}
 	switch CredentialKindFor(svc) {
 	case CredentialNone:
 		if inst.APIKey != "" || inst.Username != "" || inst.Password != "" {

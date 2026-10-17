@@ -104,6 +104,8 @@ func registerQBittorrent(s *Server) {
 		"Re-verify torrent data on disk. Rechecking is slow for large torrents. Takes hashes from qbittorrent_list_torrents, or [\"all\"].",
 		"recheck", arr.QBittorrentRecheckTorrents)
 
+	registerQBitBulkAction(s, svc, spec, "qbittorrent_reannounce_torrents", "Ask trackers for peers for selected torrents; guarded deployments require one exact hash.", "reannounce", arr.QBittorrentReannounceTorrents)
+
 	register(s, svc, spec, toolMeta{
 		name: "qbittorrent_set_category",
 		description: "File torrents under a category from qbittorrent_list_categories; an empty category clears it. " +

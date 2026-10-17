@@ -20,11 +20,12 @@ const importPlanTTL = 5 * time.Minute
 const maxImportPlans = 256
 
 type importPlan struct {
-	service  string
-	instance string
-	query    ManualImportPreviewArgs
-	snapshot string
-	expires  time.Time
+	requiresOverlap bool
+	service         string
+	instance        string
+	query           ManualImportPreviewArgs
+	snapshot        string
+	expires         time.Time
 }
 
 type importPlans struct {
@@ -77,7 +78,7 @@ func (s *Server) previewGuardedImport(ctx context.Context, c *arr.Client, servic
 	if err != nil {
 		return zero, err
 	}
-	snapshot, err := importSnapshot(files)
+	snapshot, overlaps, err := s.guardedImportSnapshot(ctx, c, service, in, files)
 	if err != nil {
 		return zero, err
 	}
@@ -94,9 +95,12 @@ func (s *Server) previewGuardedImport(ctx context.Context, c *arr.Client, servic
 	}
 	id := rand.Text()
 	expires := now.Add(importPlanTTL)
-	s.imports.pending[id] = importPlan{service: service, instance: inst.Name, query: in, snapshot: snapshot, expires: expires}
+	s.imports.pending[id] = importPlan{service: service, instance: inst.Name, query: in, snapshot: snapshot, expires: expires, requiresOverlap: len(overlaps) > 0}
 	s.log.Info("manual import planned: service=%s instance=%s downloadId=%s files=%d expires=%s", service, inst.Name, in.DownloadID, len(files), expires.UTC().Format(time.RFC3339))
-	return ManualImportCandidateList{Files: files, Count: len(files), PlanID: id, ExpiresAt: expires.UTC().Format(time.RFC3339), Warnings: warnings}, nil
+	if len(overlaps) > 0 {
+		warnings = append(warnings, "Competing downloads cover selected target units; explicit acceptOverlap=true is required.")
+	}
+	return ManualImportCandidateList{Files: files, Count: len(files), PlanID: id, ExpiresAt: expires.UTC().Format(time.RFC3339), Warnings: warnings, OverlappingDownloads: overlaps, RequiresOverlapAcceptance: len(overlaps) > 0}, nil
 }
 
 func (s *Server) applyGuardedImport(ctx context.Context, c *arr.Client, service string, in ManualImportArgs) (arr.CommandResult, error) {
@@ -119,6 +123,10 @@ func (s *Server) applyGuardedImport(ctx context.Context, c *arr.Client, service 
 		s.imports.mu.Unlock()
 		return zero, fmt.Errorf("unknown, expired or already consumed import plan; obtain a fresh preview")
 	}
+	if plan.requiresOverlap && !in.AcceptOverlap {
+		s.imports.mu.Unlock()
+		return zero, fmt.Errorf("preview identifies competing downloads; explicit acceptOverlap=true is required")
+	}
 	key := importKey(service, inst.Name, plan.query.DownloadID)
 	_, recent := s.imports.attempts[key]
 	if recent || s.imports.busy[scope] {
@@ -133,7 +141,7 @@ func (s *Server) applyGuardedImport(ctx context.Context, c *arr.Client, service 
 	if err != nil {
 		return zero, fmt.Errorf("import validation failed; plan consumed, obtain a fresh preview: %w", err)
 	}
-	snapshot, err := importSnapshot(files)
+	snapshot, _, err := s.guardedImportSnapshot(ctx, c, service, plan.query, files)
 	if err != nil {
 		return zero, err
 	}
@@ -142,7 +150,7 @@ func (s *Server) applyGuardedImport(ctx context.Context, c *arr.Client, service 
 	}
 	payload := make([]arr.ManualImportFile, 0, len(files))
 	for _, f := range files {
-		payload = append(payload, arr.ManualImportFile{Path: f.Path, SeriesID: f.SeriesID, EpisodeIDs: f.EpisodeIDs, MovieID: f.MovieID, Quality: f.Quality, Languages: f.Languages, ReleaseGroup: f.ReleaseGroup, DownloadID: f.DownloadID})
+		payload = append(payload, arr.ManualImportFile{Revision: f.Revision, IndexerFlags: f.IndexerFlags, ReleaseType: f.ReleaseType, Path: f.Path, SeriesID: f.SeriesID, EpisodeIDs: f.EpisodeIDs, MovieID: f.MovieID, Quality: f.Quality, Languages: f.Languages, ReleaseGroup: f.ReleaseGroup, DownloadID: f.DownloadID})
 	}
 	var submittedAt time.Time
 	command, err := arr.ManualImportChecked(ctx, c, payload, "copy", func() error {
@@ -151,6 +159,15 @@ func (s *Server) applyGuardedImport(ctx context.Context, c *arr.Client, service 
 		}
 		if err := importCommandsIdle(ctx, c); err != nil {
 			return err
+		}
+		if s.cfg.Downloads.Client != "" {
+			latest, _, validationErr := s.guardedImportSnapshot(ctx, c, service, plan.query, files)
+			if validationErr != nil {
+				return validationErr
+			}
+			if latest != plan.snapshot {
+				return fmt.Errorf("download evidence changed before submission; obtain a fresh preview")
+			}
 		}
 		s.imports.mu.Lock()
 		defer s.imports.mu.Unlock()
@@ -212,7 +229,8 @@ func guardedImportFiles(ctx context.Context, c *arr.Client, service string, in M
 	if err := importCommandsIdle(ctx, c); err != nil {
 		return nil, nil, err
 	}
-	if err := importDownloadComplete(ctx, c, in.DownloadID, service, targetID); err != nil {
+	canonicalDownloadID, err := importDownloadComplete(ctx, c, in.DownloadID, service, targetID)
+	if err != nil {
 		return nil, nil, err
 	}
 	roots, err := arr.ListRootFolders(ctx, c)
@@ -259,7 +277,7 @@ func guardedImportFiles(ctx context.Context, c *arr.Client, service string, in M
 		}
 	}
 	filter := false
-	candidates, err := arr.ListManualImportCandidates(ctx, c, arr.ManualImportQuery{DownloadID: in.DownloadID, SeriesID: in.SeriesID, MovieID: in.MovieID, FilterExistingFiles: &filter})
+	candidates, err := arr.ListManualImportCandidates(ctx, c, arr.ManualImportQuery{DownloadID: canonicalDownloadID, SeriesID: in.SeriesID, MovieID: in.MovieID, FilterExistingFiles: &filter})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -326,8 +344,9 @@ func guardedImportFiles(ctx context.Context, c *arr.Client, service string, in M
 	return files, warnings, nil
 }
 
-func importDownloadComplete(ctx context.Context, c *arr.Client, downloadID, service string, targetID int) error {
+func importDownloadComplete(ctx context.Context, c *arr.Client, downloadID, service string, targetID int) (string, error) {
 	found := false
+	canonical := ""
 	for page := 1; page <= 10; page++ {
 		out, err := arr.GetJSON[struct {
 			Total   int `json:"totalRecords"`
@@ -341,29 +360,30 @@ func importDownloadComplete(ctx context.Context, c *arr.Client, downloadID, serv
 			} `json:"records"`
 		}](ctx, c, "/queue", arr.Query{"page": fmt.Sprint(page), "pageSize": "100"})
 		if err != nil {
-			return err
+			return "", err
 		}
 		for _, row := range out.Records {
 			if !strings.EqualFold(row.DownloadID, downloadID) {
 				continue
 			}
 			found = true
+			canonical = row.DownloadID
 			if !strings.EqualFold(row.Status, "completed") || row.SizeLeft == nil || *row.SizeLeft != 0 || row.State != "importBlocked" {
-				return fmt.Errorf("download must be completed with zero bytes left and native importBlocked state")
+				return "", fmt.Errorf("download must be completed with zero bytes left and native importBlocked state")
 			}
 			if service == "sonarr" && row.SeriesID != targetID || service == "radarr" && row.MovieID != targetID {
-				return fmt.Errorf("download queue belongs to a different target")
+				return "", fmt.Errorf("download queue belongs to a different target")
 			}
 		}
 		if page*100 >= out.Total {
 			if !found {
-				return fmt.Errorf("download is not present in the native queue")
+				return "", fmt.Errorf("download is not present in the native queue")
 			}
-			return nil
+			return canonical, nil
 		}
 		if len(out.Records) == 0 {
 			break
 		}
 	}
-	return fmt.Errorf("native queue is too large or incomplete to validate safely")
+	return "", fmt.Errorf("native queue is too large or incomplete to validate safely")
 }

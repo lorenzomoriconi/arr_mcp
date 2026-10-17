@@ -25,3 +25,7 @@ CLAUDE.md
 *.local.*
 .env.*
 !.env.example
+
+# Python integration helpers
+__pycache__/
+*.py[cod]

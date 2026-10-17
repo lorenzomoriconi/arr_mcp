@@ -56,28 +56,34 @@ type ManualImportPreviewArgs struct {
 
 // ManualImportCandidateList wraps manual import preview results.
 type ManualImportCandidateList struct {
-	PlanID    string                      `json:"planId,omitempty"`
-	ExpiresAt string                      `json:"expiresAt,omitempty"`
-	Warnings  []string                    `json:"warnings,omitempty"`
-	Files     []arr.ManualImportCandidate `json:"files"`
-	Count     int                         `json:"count"`
+	OverlappingDownloads      []string                    `json:"overlappingDownloads,omitempty"`
+	RequiresOverlapAcceptance bool                        `json:"requiresOverlapAcceptance,omitempty"`
+	PlanID                    string                      `json:"planId,omitempty"`
+	ExpiresAt                 string                      `json:"expiresAt,omitempty"`
+	Warnings                  []string                    `json:"warnings,omitempty"`
+	Files                     []arr.ManualImportCandidate `json:"files"`
+	Count                     int                         `json:"count"`
 }
 
 // ManualImportFileArg is one file to import. Quality and Languages are names as
 // the preview reports them, e.g. "WEBDL-1080p" and "English".
 type ManualImportFileArg struct {
-	Path         string   `json:"path" jsonschema:"path from the manual_import_preview tool, unchanged"`
-	SeriesID     *int     `json:"seriesId,omitempty" jsonschema:"Sonarr only; which series the file belongs to"`
-	EpisodeIDs   []int    `json:"episodeIds,omitempty" jsonschema:"Sonarr only; which episodes the file contains"`
-	MovieID      *int     `json:"movieId,omitempty" jsonschema:"Radarr only; which movie the file is"`
-	Quality      string   `json:"quality,omitempty" jsonschema:"quality name, e.g. WEBDL-1080p; taken from the preview unless it was wrong"`
-	Languages    []string `json:"languages,omitempty" jsonschema:"language names, e.g. English"`
-	ReleaseGroup string   `json:"releaseGroup,omitempty"`
-	DownloadID   string   `json:"downloadId,omitempty" jsonschema:"downloadId from the preview, so the import is credited to that download"`
+	Revision     *arr.QualityRevision `json:"revision,omitempty"`
+	IndexerFlags int                  `json:"indexerFlags,omitempty"`
+	ReleaseType  string               `json:"releaseType,omitempty"`
+	Path         string               `json:"path" jsonschema:"path from the manual_import_preview tool, unchanged"`
+	SeriesID     *int                 `json:"seriesId,omitempty" jsonschema:"Sonarr only; which series the file belongs to"`
+	EpisodeIDs   []int                `json:"episodeIds,omitempty" jsonschema:"Sonarr only; which episodes the file contains"`
+	MovieID      *int                 `json:"movieId,omitempty" jsonschema:"Radarr only; which movie the file is"`
+	Quality      string               `json:"quality,omitempty" jsonschema:"quality name, e.g. WEBDL-1080p; taken from the preview unless it was wrong"`
+	Languages    []string             `json:"languages,omitempty" jsonschema:"language names, e.g. English"`
+	ReleaseGroup string               `json:"releaseGroup,omitempty"`
+	DownloadID   string               `json:"downloadId,omitempty" jsonschema:"downloadId from the preview, so the import is credited to that download"`
 }
 
 // ManualImportArgs is the input for the manual_import tools.
 type ManualImportArgs struct {
+	AcceptOverlap bool   `json:"acceptOverlap,omitempty" jsonschema:"guarded mode: explicitly accept overlapping downloads shown by the preview"`
 	PlanID        string `json:"planId,omitempty" jsonschema:"guarded mode: opaque plan id from manual_import_preview"`
 	AcceptCleanup bool   `json:"acceptCleanup,omitempty" jsonschema:"guarded mode: explicitly accept native torrent/source cleanup even in copy mode"`
 	InstanceArg

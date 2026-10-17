@@ -27,3 +27,7 @@ element `"all"` targets every torrent, which is how the WebUI's select-all butto
 | `qbittorrent_set_global_limits` | Write |
 | `qbittorrent_delete_torrents` | Destructive |
 | `qbittorrent_delete_categories` | Destructive |
+
+## Guarded deployment controls
+
+`qbittorrent_reannounce_torrents` asks trackers for peers. Stop/start/recheck/reannounce all require one exact hash when downloads.guarded is enabled; bulk selectors are refused. Torrent listings include amountLeft for completion checks. Unrestricted torrent-add/category/path/configuration tools remain outside the Hermes allowlist; app-scoped magnet plans provide its supported magnet route.

@@ -20,8 +20,9 @@ const confirmationID = "arr-mcp-confirm"
 // difference — the SDK's multi round-trip middleware fulfils the request by
 // eliciting on our behalf and reinvokes the handler.
 type sessionConfirmer struct {
-	session *mcp.ServerSession
-	params  *mcp.CallToolParamsRaw
+	capabilities *mcp.ClientCapabilities
+	session      *mcp.ServerSession
+	params       *mcp.CallToolParamsRaw
 }
 
 // Decision reports the user's answer when this call is a retry carrying one.
@@ -45,11 +46,13 @@ func (c sessionConfirmer) Decision() (approved, answered bool, err error) {
 // Ask builds the result that asks the client to confirm prompt. It reports
 // ErrConfirmUnsupported when the client cannot prompt its user at all.
 func (c sessionConfirmer) Ask(prompt string) (*mcp.CallToolResult, error) {
-	if c.session == nil {
-		return nil, ErrConfirmUnsupported
+	caps := c.capabilities
+	if caps == nil && c.session != nil {
+		if init := c.session.InitializeParams(); init != nil {
+			caps = init.Capabilities
+		}
 	}
-	init := c.session.InitializeParams()
-	if init == nil || init.Capabilities == nil || init.Capabilities.Elicitation == nil {
+	if caps == nil || caps.Elicitation == nil {
 		return nil, ErrConfirmUnsupported
 	}
 

@@ -23,3 +23,9 @@
 ## Fork command receipts
 
 `radarr_list_commands` lists native background command receipts; `radarr_get_command` reads one by its positive `id`. Both are read-only and return command id, name, status, queued/started/ended times, result and message. A completed command is not proof of an import: verify exact-download history and current library files. See [fork configuration](../../FORK.md) for guarded imports and history filters.
+
+## Guarded public magnets and import evidence
+
+`radarr_magnet_preview` takes an existing itemId and one original public/DHT v1 magnet. It binds native parsing, current files/profile/overlaps and the configured qBittorrent endpoint/category into a five-minute plan. Tracker hints are omitted; source/peer/web-seed hints and arbitrary torrent URLs/paths are refused. `radarr_add_magnet` takes that planId plus acceptUnverified and, when required, acceptReplacementRisk. It never resumes or recategorizes an existing hash. Uncertain submissions consume the plan; inspect exact-hash state before retrying.
+
+With downloads.client configured, guarded manual imports also require exact completed wanted qBittorrent file paths/sizes and native categories, preserving revision/repack/indexer/release metadata. Preview reports competing hashes and requires acceptOverlap when necessary, in addition to native cleanup acceptance. All evidence is rechecked before fixed Copy-mode submission. Queue tools now include download/media IDs, blocked-import reasons and native page totals. See [native integration](../../integrations/README.md) for limitations.

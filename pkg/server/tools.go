@@ -79,7 +79,13 @@ func register[In instanceSelector, Out any](
 		if err != nil {
 			return nil, zero, err
 		}
-		confirmer := sessionConfirmer{session: req.Session, params: req.Params}
+		client := arr.NewClient(inst.URL, spec, InstanceCredentials(inst))
+		if s.cfg.Downloads.Guarded && meta.access != AccessRead {
+			if err := s.validateGuardedAction(ctx, client, service, inst.Name, in); err != nil {
+				return nil, zero, err
+			}
+		}
+		confirmer := sessionConfirmer{session: req.Session, params: req.Params, capabilities: req.ClientCapabilities()}
 		gated, err := s.gateFor(inst).Authorize(confirmer, meta.name, meta.access)
 		if err != nil {
 			return nil, zero, err
@@ -90,7 +96,6 @@ func register[In instanceSelector, Out any](
 			return gated, zero, nil
 		}
 
-		client := arr.NewClient(inst.URL, spec, InstanceCredentials(inst))
 		out, err := fn(ctx, client, in)
 		if err != nil {
 			return nil, zero, fmt.Errorf("%s (%s instance %q): %w", meta.name, service, inst.Name, err)
@@ -245,10 +250,21 @@ type DiskSpaceList struct {
 	Disks []arr.DiskSpace `json:"disks"`
 }
 
-// QueueList wraps download queue results.
+// QueueArgs selects a native queue page while retaining the older limit alias.
+type QueueArgs struct {
+	InstanceArg
+	Page     int `json:"page,omitempty"`
+	PageSize int `json:"pageSize,omitempty"`
+	Limit    int `json:"limit,omitempty"`
+}
+
+// QueueList wraps download queue results and native pagination totals.
 type QueueList struct {
-	Items []arr.QueueItem `json:"items"`
-	Count int             `json:"count"`
+	Page     int             `json:"page"`
+	PageSize int             `json:"pageSize"`
+	Total    int             `json:"total"`
+	Items    []arr.QueueItem `json:"items"`
+	Count    int             `json:"count"`
 }
 
 // HistoryList wraps history results.

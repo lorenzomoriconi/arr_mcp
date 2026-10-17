@@ -16,6 +16,8 @@ func registerAll(s *Server) {
 	registerProwlarr(s)
 	registerBazarr(s)
 	registerQBittorrent(s)
+	registerGuardedMagnets(s, "sonarr", arr.SonarrSpec)
+	registerGuardedMagnets(s, "radarr", arr.RadarrSpec)
 	registerNZBGet(s)
 	registerMaintainerr(s)
 	registerSeerr(s)
@@ -495,9 +497,13 @@ func registerOperations(s *Server, svc string, spec arr.ServiceSpec, opts operat
 		name:        svc + "_queue",
 		description: "List downloads currently queued or in progress in " + svc + ".",
 		access:      AccessRead,
-	}, func(ctx context.Context, c *arr.Client, in LimitArgs) (QueueList, error) {
-		items, err := arr.ListQueue(ctx, c, in.Limit)
-		return QueueList{Items: items, Count: len(items)}, err
+	}, func(ctx context.Context, c *arr.Client, in QueueArgs) (QueueList, error) {
+		size := in.PageSize
+		if size == 0 {
+			size = in.Limit
+		}
+		page, err := arr.ListQueuePage(ctx, c, in.Page, size)
+		return QueueList{Items: page.Items, Count: len(page.Items), Page: page.Page, PageSize: page.PageSize, Total: page.Total}, err
 	})
 
 	register(s, svc, spec, toolMeta{

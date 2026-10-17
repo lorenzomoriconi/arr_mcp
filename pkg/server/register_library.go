@@ -144,7 +144,7 @@ func registerManualImport(s *Server, svc string, spec arr.ServiceSpec, opts libr
 		}
 		files := make([]arr.ManualImportFile, 0, len(in.Files))
 		for _, f := range in.Files {
-			file := arr.ManualImportFile{
+			file := arr.ManualImportFile{Revision: f.Revision, IndexerFlags: f.IndexerFlags, ReleaseType: f.ReleaseType,
 				Path:         f.Path,
 				EpisodeIDs:   f.EpisodeIDs,
 				Quality:      f.Quality,

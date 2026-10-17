@@ -2,7 +2,11 @@
 
 This is Lorenzo's fork of [GauranshMathur/ARR_MCP](https://github.com/GauranshMathur/ARR_MCP), initially based on v1.13.1 (`90fd1578ec1e5f0dee40a7ca9fc8b384ce0834b5`). The MIT licence and upstream history remain intact. The Go module name stays unchanged to keep the patch set small; builds use this checkout's source.
 
-## Scope and status
+## Native Hermes cutover support
+
+This release adds a [native Hermes integration](integrations/README.md): POST-only stateless MCP over an operator-selected endpoint, TCP peer restrictions, guarded public magnets and completed-file manifest checks for manual imports. The example selects one configured download client and enforces single-target controls and configured library roots. Native quality revisions/indexer metadata and paginated queue/download identifiers are retained. A deterministic native-SDK watch helper verifies exact-hash import history against current file IDs/paths without model calls. Operator-only staging/configuration/rollback helpers keep runtime secrets out of Git. Hermes uses bounded delegated authority rather than native approval buttons; see the integration’s explicit trust-boundary and client-compatibility notes. Deployment/live validation is a separate recorded operation; this code does not grant Hermes repository or NAS administrator access.
+
+## Version 1.14 source baseline
 
 The first change set adds:
 
@@ -15,7 +19,7 @@ These options are opt-in. Deliberate default changes are strict rejection of unk
 
 ### Import limits
 
-The guard trusts Sonarr/Radarr's current queue, scanner, and library database. It does **not** independently verify a qBittorrent file manifest, filesystem symlinks, torrent category, competing downloads, or native cleanup configuration. It cannot atomically exclude changes by native jobs or other API clients. These differences must be evaluated before replacing an existing connector that performs those checks.
+The guard trusts Sonarr/Radarr's current queue, scanner, and library database. Without downloads.client it does **not** independently verify a qBittorrent file manifest, torrent category or competing downloads. The native Hermes example now opts into those additional checks. No mode verifies filesystem symlinks without a media mount; native cleanup remains explicitly disclosed. It cannot atomically exclude changes by native jobs or other API clients. These differences must be evaluated before replacing an existing connector that performs those checks.
 
 Plans are in-memory, capped at 256, invalidated by restart, and bound to service and instance. All callers authenticated with the deployment token have the same privileges; plans are not separate user identities. A recent-submission hold prevents another plan from submitting the same download for five minutes. A failed POST is reported as uncertain and its token cannot be replayed. Active native command checks survive a server restart or hold expiry, but there is still no atomic or durable exactly-once delivery guarantee across independent API clients. Inspect native commands, exact-download history, and current library file IDs/paths before trying again. A queued or completed command alone does not prove import success.
 
@@ -29,7 +33,7 @@ TrueNAS runs the published image, not a Git checkout. Use an explicit version (o
 
 Keep private API credentials and the MCP token in TrueNAS environment/configuration, outside the repository and image. Use a non-root container, read-only root filesystem, dropped capabilities and no host networking, media datasets, Docker socket or NAS administrator credentials. The deployment should retain private VPN access and its source/Host/path restrictions. Do not deploy the upstream wide-open Compose quickstart unchanged.
 
-The existing Hermes connector stays active until authentication, native MCP delivery/approvals, import verification, and finite download watches have been validated for this fork. Telegram preferences, the media skill and scheduling remain outside the application fork. The previous connector's RPC client and watch helper cannot be pointed at native MCP without adaptation. No media operation is part of the initial source setup.
+The previous Hermes connector stays active until authentication, native MCP delivery, bounded delegated actions, import verification, and finite download watches have been validated for this fork. Telegram preferences, the media skill and scheduling remain outside the application fork. The previous connector's RPC client and watch helper cannot be pointed at native MCP without adaptation. No media operation is part of the initial source setup.
 
 ## Hermes contributing
 
@@ -45,9 +49,9 @@ Run the tests and checks in `AGENTS.md`. A source or fake-API test is not eviden
 
 ## Explicit follow-ups before cutover
 
-The safe example excludes unrestricted `qbittorrent_add_torrent`: its native save path/category/automatic-management arguments need a server-side fence before Hermes gets magnet-add access. Fetching through the existing arr `grab_release` tools remains available. Profile updates are deliberately allowed, and may cause native upgrades/replacement according to the app's own rules; guarding manual import is not a prohibition on all native background writes.
+The safe example excludes unrestricted `qbittorrent_add_torrent`: its native save path/category/automatic-management arguments need a server-side fence before Hermes gets magnet-add access. Fetching through the existing arr `grab_release` tools remains available. Guarded profile updates are limited to unassigned profiles; creating/configuring a separate preset and assigning it to one title may cause native upgrades/replacement according to the app's own rules; guarding manual import is not a prohibition on all native background writes.
 
-The shared manual-import input schemas retain upstream optional arguments for compatibility; guarded mode refuses forbidden folder/file/mode input at runtime. Guarded preview advertises non-idempotence because it creates ephemeral plans. Native quality revision/repack and indexer metadata still follow upstream's name-based import payload limitations; this must be considered before claiming import metadata parity. Plans and audit logs contain no authorization token; operational plan/submission/uncertain-outcome events are logged without source paths or opaque plan IDs.
+The shared manual-import input schemas retain upstream optional arguments for compatibility; guarded mode refuses forbidden folder/file/mode input at runtime. Guarded preview advertises non-idempotence because it creates ephemeral plans. The cutover code preserves native quality revision/repack, indexer flags and release type in the scanner-owned import plan and command payload. Plans and audit logs contain no authorization token; operational plan/submission/uncertain-outcome events are logged without source paths or opaque plan IDs.
 
 Before granting Hermes repository write access, use a separate scoped identity without Workflows permission, configure reviewed PRs/protected branches and ownership for release/security files, and choose GHCR package visibility/access. Deploy a recorded image digest. This source baseline does not configure those credentials or give Hermes NAS administration access.
 

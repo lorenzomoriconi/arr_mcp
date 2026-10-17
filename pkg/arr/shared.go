@@ -26,6 +26,14 @@ type DiskSpace struct {
 
 // QueueItem is an in-progress or pending download.
 type QueueItem struct {
+	DownloadID            string               `json:"downloadId,omitempty"`
+	SeriesID              int                  `json:"seriesId,omitempty"`
+	MovieID               int                  `json:"movieId,omitempty"`
+	EpisodeID             int                  `json:"episodeId,omitempty"`
+	TrackedDownloadState  string               `json:"trackedDownloadState,omitempty"`
+	TrackedDownloadStatus string               `json:"trackedDownloadStatus,omitempty"`
+	StatusMessages        []QueueStatusMessage `json:"statusMessages,omitempty"`
+
 	ID             int    `json:"id"`
 	Title          string `json:"title"`
 	Status         string `json:"status,omitempty"`
@@ -865,4 +873,36 @@ func ListUpdates(ctx context.Context, c *Client) ([]UpdatePackage, error) {
 // GetQueueStatus summarises the download queue in one small record.
 func GetQueueStatus(ctx context.Context, c *Client) (QueueStatus, error) {
 	return GetJSON[QueueStatus](ctx, c, "/queue/status")
+}
+
+// QueueStatusMessage reports native import/download attention without discarding the reason.
+type QueueStatusMessage struct {
+	Title    string   `json:"title"`
+	Messages []string `json:"messages,omitempty"`
+}
+
+// QueuePage preserves the native total so callers can detect incomplete scans.
+type QueuePage struct {
+	Items    []QueueItem `json:"items"`
+	Page     int         `json:"page"`
+	PageSize int         `json:"pageSize"`
+	Total    int         `json:"total"`
+}
+
+// ListQueuePage returns one bounded queue page with native download and import evidence.
+func ListQueuePage(ctx context.Context, c *Client, page, pageSize int) (QueuePage, error) {
+	if page == 0 {
+		page = 1
+	}
+	if pageSize == 0 {
+		pageSize = 20
+	}
+	if page < 1 || page > 10000 || pageSize < 1 || pageSize > 1000 {
+		return QueuePage{}, fmt.Errorf("queue requires page 1-10000 and pageSize 1-1000")
+	}
+	env, err := GetJSON[paged[QueueItem]](ctx, c, "/queue", Query{"page": strconv.Itoa(page), "pageSize": strconv.Itoa(pageSize)})
+	if err != nil {
+		return QueuePage{}, err
+	}
+	return QueuePage{Items: env.Records, Page: page, PageSize: pageSize, Total: env.TotalRecords}, nil
 }

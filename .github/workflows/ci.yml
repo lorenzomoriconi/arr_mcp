@@ -59,6 +59,15 @@ jobs:
       - name: Test
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
 
+      - name: Hermes deterministic watch tests
+        run: python3 -m unittest discover -s integrations/hermes -p "test_*.py" -q
+
+      - name: Operator deployment tests
+        run: |
+          python3 -m pip install --disable-pip-version-check --quiet -r integrations/operator/requirements.txt
+          yaml_site=$(python3 -c "import pathlib, yaml; print(pathlib.Path(yaml.__file__).parent.parent)")
+          sudo env PYTHONPATH="$yaml_site" python3 -m unittest discover -s integrations/operator -p "test_*.py" -q
+
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
 

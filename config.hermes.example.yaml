@@ -3,11 +3,20 @@
 server:
   transport: http
   addr: 0.0.0.0:8080
+  path: /rpc
+  stateless: true
+  jsonResponse: true
+  # Set allowedPeers to the actual reverse-proxy source IP/CIDR in production.
   logLevel: info
   bearerToken: ${ARR_MCP_HTTP_TOKEN}
+downloads:
+  guarded: true
+  client: main
 permissions:
-  mode: confirm
-  confirmScope: write
+  # Trusted delegated automation: the model can read the scoped MCP token.
+  # This token is constrained by server guards, not a separate human identity.
+  # Installed Hermes does not yet handle modern input-required approval retries.
+  mode: full
   fallback: deny
 tools:
   denyDestructive: true
@@ -18,6 +27,16 @@ tools:
     - sonarr_list_episodes
     - sonarr_list_episode_files
     - sonarr_list_quality_profiles
+    - sonarr_get_quality_profile
+    - sonarr_create_quality_profile
+    - sonarr_list_quality_definitions
+    - sonarr_list_custom_formats
+    - sonarr_get_custom_format
+    - sonarr_system_status
+    - sonarr_health
+    - sonarr_magnet_preview
+    - sonarr_add_magnet
+    - sonarr_edit_series
     - sonarr_list_root_folders
     - sonarr_queue
     - sonarr_history
@@ -35,6 +54,16 @@ tools:
     - radarr_search_movies
     - radarr_list_movie_files
     - radarr_list_quality_profiles
+    - radarr_get_quality_profile
+    - radarr_create_quality_profile
+    - radarr_list_quality_definitions
+    - radarr_list_custom_formats
+    - radarr_get_custom_format
+    - radarr_system_status
+    - radarr_health
+    - radarr_magnet_preview
+    - radarr_add_magnet
+    - radarr_edit_movies
     - radarr_list_root_folders
     - radarr_queue
     - radarr_history
@@ -51,6 +80,13 @@ tools:
     - qbittorrent_torrent_files
     - qbittorrent_stop_torrents
     - qbittorrent_start_torrents
+    - qbittorrent_recheck_torrents
+    - qbittorrent_reannounce_torrents
+    - qbittorrent_system_status
+    - qbittorrent_transfer_info
+    - qbittorrent_list_categories
+    - prowlarr_system_status
+    - prowlarr_health
 imports:
   guarded: true
 services:
@@ -69,4 +105,9 @@ services:
       url: ${QBITTORRENT_URL}
       username: ${QBITTORRENT_USERNAME}
       password: ${QBITTORRENT_PASSWORD}
+      default: true
+  prowlarr:
+    - name: main
+      url: ${PROWLARR_URL}
+      apiKey: ${PROWLARR_API_KEY}
       default: true
