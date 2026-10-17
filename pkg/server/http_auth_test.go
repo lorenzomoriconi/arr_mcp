@@ -55,7 +55,7 @@ type testHTTPBearerTransport struct{ token string }
 
 func (b testHTTPBearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	clone := r.Clone(r.Context())
-	clone.Header.Set("Authorization", "Bearer "+b.token)
+	clone.Header.Set("Authorization", "bEaReR "+b.token)
 	return http.DefaultTransport.RoundTrip(clone)
 }
 

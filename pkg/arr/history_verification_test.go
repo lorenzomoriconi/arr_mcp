@@ -10,14 +10,14 @@ import (
 )
 
 func TestHistoryPreservesImportEvidenceAndTrimsOtherData(t *testing.T) {
-	srv, _ := fakeService(t, 200, `{"records":[{"id":9,"eventType":"downloadFolderImported","downloadId":"ABC","episodeId":2,"seriesId":1,"movieId":3,"data":{"episodeFileId":"77","movieFileId":"88","droppedPath":"/downloads/a.mkv","importedPath":"/library/a.mkv","downloadUrl":"https://secret.invalid/key"}}]}`)
+	srv, _ := fakeService(t, 200, `{"records":[{"id":9,"eventType":"downloadFolderImported","downloadId":"ABC","episodeId":2,"seriesId":1,"movieId":3,"data":{"FileId":"77","droppedPath":"/downloads/a.mkv","importedPath":"/library/a.mkv","downloadUrl":"https://secret.invalid/key"}}]}`)
 	records, err := ListHistory(context.Background(), NewClient(srv.URL, SonarrSpec, Credentials{APIKey: "fixture"}), 20)
 	if err != nil {
 		t.Fatal(err)
 	}
 	encoded, _ := json.Marshal(records)
 	body := string(encoded)
-	for _, want := range []string{`"downloadId":"ABC"`, `"episodeId":2`, `"seriesId":1`, `"movieId":3`, `"episodeFileId":"77"`, `"movieFileId":"88"`, `"droppedPath":"/downloads/a.mkv"`, `"importedPath":"/library/a.mkv"`} {
+	for _, want := range []string{`"downloadId":"ABC"`, `"episodeId":2`, `"seriesId":1`, `"movieId":3`, `"fileId":"77"`, `"droppedPath":"/downloads/a.mkv"`, `"importedPath":"/library/a.mkv"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("lost history evidence %s: %s", want, body)
 		}

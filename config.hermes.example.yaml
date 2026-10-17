@@ -49,7 +49,6 @@ tools:
     - radarr_update_quality_profile
     - qbittorrent_list_torrents
     - qbittorrent_torrent_files
-    - qbittorrent_add_torrent
     - qbittorrent_stop_torrents
     - qbittorrent_start_torrents
 imports:

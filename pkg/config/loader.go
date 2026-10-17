@@ -88,10 +88,10 @@ type Permissions struct {
 
 // ServerConfig holds transport and logging settings.
 type ServerConfig struct {
-	BearerToken string `yaml:"bearerToken"`
 	Transport   string `yaml:"transport"`
 	Addr        string `yaml:"addr"`
 	LogLevel    string `yaml:"logLevel"`
+	BearerToken string `yaml:"bearerToken"`
 }
 
 var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)

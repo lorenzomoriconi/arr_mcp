@@ -69,6 +69,12 @@ func main() {
 	// Logging goes to stderr: under stdio, stdout carries the JSON-RPC stream.
 	log := logger.New(cfg.Server.LogLevel, "arr-mcp")
 
+	s := server.New(cfg, log)
+	if err := s.PolicyError(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 	if *check {
 		os.Exit(checkAll(cfg, log))
 	}
@@ -80,10 +86,10 @@ func main() {
 	log.Info("permissions: mode=%s confirmScope=%s fallback=%s",
 		cfg.Permissions.Mode, cfg.Permissions.ConfirmScope, cfg.Permissions.Fallback)
 
+	log.Info("tool policy: allowConfigured=%t allowCount=%d denyCount=%d denyDestructive=%t guardedImports=%t httpAuth=%t", cfg.Tools.Allow != nil, len(cfg.Tools.Allow), len(cfg.Tools.Deny), cfg.Tools.DenyDestructive, cfg.Imports.Guarded, cfg.Server.BearerToken != "")
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	s := server.New(cfg, log)
 
 	switch cfg.Server.Transport {
 	case "stdio":

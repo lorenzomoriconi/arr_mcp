@@ -107,7 +107,8 @@ func registerManualImport(s *Server, svc string, spec arr.ServiceSpec, opts libr
 	}
 
 	register(s, svc, spec, toolMeta{
-		name: svc + "_manual_import_preview",
+		name:          svc + "_manual_import_preview",
+		nonIdempotent: s.cfg.Imports.Guarded,
 		description: "List the files " + svc + " could import from a folder or a finished download, " +
 			"with the " + opts.noun + " it matched each one to. Give folder, or downloadId from " + svc + "_queue. " +
 			"Imports nothing. Rejections explain why a file cannot be imported as matched; " +

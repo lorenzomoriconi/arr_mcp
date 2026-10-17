@@ -17,21 +17,25 @@ import (
 
 // Server wires configured service instances into an MCP server.
 type Server struct {
-	imports *importPlans
-	cfg     *config.Config
-	log     *logger.Logger
-	mcp     *mcp.Server
+	cfg        *config.Config
+	log        *logger.Logger
+	mcp        *mcp.Server
+	imports    *importPlans
+	knownTools map[string]struct{}
+	policyErr  error
 }
 
 // New builds a server exposing tools for every configured service instance.
 func New(cfg *config.Config, log *logger.Logger) *Server {
 	s := &Server{
-		cfg:     cfg,
-		imports: newImportPlans(),
-		log:     log,
-		mcp:     mcp.NewServer(&mcp.Implementation{Name: "arr-mcp", Version: Version}, nil),
+		cfg:        cfg,
+		imports:    newImportPlans(),
+		knownTools: map[string]struct{}{},
+		log:        log,
+		mcp:        mcp.NewServer(&mcp.Implementation{Name: "arr-mcp", Version: Version}, nil),
 	}
 	registerAll(s)
+	s.policyErr = s.validateToolPolicyNames()
 	return s
 }
 
@@ -63,6 +67,9 @@ func (s *Server) registersForService(service string, a Access) bool {
 // RunStdio serves MCP over stdin/stdout until the client disconnects. Nothing
 // else may write to stdout in this mode: it carries the JSON-RPC stream.
 func (s *Server) RunStdio(ctx context.Context) error {
+	if s.policyErr != nil {
+		return s.policyErr
+	}
 	s.log.Info("serving MCP over stdio")
 	return s.mcp.Run(ctx, &mcp.StdioTransport{})
 }
@@ -70,6 +77,9 @@ func (s *Server) RunStdio(ctx context.Context) error {
 // HTTPHandler constructs the HTTP routes with optional bearer authentication.
 // Guarded imports require a token on HTTP even if the operator forgets to set it.
 func (s *Server) HTTPHandler() (http.Handler, error) {
+	if s.policyErr != nil {
+		return nil, s.policyErr
+	}
 	token := s.cfg.Server.BearerToken
 	if s.cfg.Imports.Guarded && token == "" {
 		return nil, fmt.Errorf("guarded HTTP requires server.bearerToken; reference a private environment variable")
@@ -81,8 +91,9 @@ func (s *Server) HTTPHandler() (http.Handler, error) {
 		expected := sha256.Sum256([]byte(token))
 		endpoint = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			auth := r.Header.Get("Authorization")
-			supplied := sha256.Sum256([]byte(strings.TrimPrefix(auth, "Bearer ")))
-			if len(r.Header.Values("Authorization")) != 1 || !strings.HasPrefix(auth, "Bearer ") || subtle.ConstantTimeCompare(supplied[:], expected[:]) != 1 {
+			scheme, value, ok := strings.Cut(auth, " ")
+			supplied := sha256.Sum256([]byte(value))
+			if len(r.Header.Values("Authorization")) != 1 || !ok || !strings.EqualFold(scheme, "Bearer") || subtle.ConstantTimeCompare(supplied[:], expected[:]) != 1 {
 				w.Header().Set("WWW-Authenticate", `Bearer realm="arr-mcp"`)
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
@@ -125,6 +136,23 @@ func (s *Server) RunHTTP(ctx context.Context, addr string) error {
 	s.log.Info("serving MCP over HTTP on %s (endpoint /mcp)", addr)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("http server: %w", err)
+	}
+	return nil
+}
+
+// PolicyError reports invalid operator tool names before exposing a transport.
+func (s *Server) PolicyError() error { return s.policyErr }
+
+func (s *Server) validateToolPolicyNames() error {
+	for _, list := range []struct {
+		name  string
+		tools []string
+	}{{"allow", s.cfg.Tools.Allow}, {"deny", s.cfg.Tools.Deny}} {
+		for _, name := range list.tools {
+			if _, known := s.knownTools[name]; !known {
+				return fmt.Errorf("tools.%s: unknown tool %q; use an exact registered tool name", list.name, name)
+			}
+		}
 	}
 	return nil
 }

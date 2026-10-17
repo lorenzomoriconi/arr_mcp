@@ -50,5 +50,7 @@
       "section": "Chores",
       "hidden": true
     }
-  ]
+  ],
+  "bootstrap-sha": "90fd1578ec1e5f0dee40a7ca9fc8b384ce0834b5",
+  "tag-separator": "/"
 }

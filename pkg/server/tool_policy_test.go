@@ -103,3 +103,32 @@ func TestGuardedImportExpiredOrWrongInstancePlanDoesNotReachApp(t *testing.T) {
 		t.Fatal("invalid plan contacted an app")
 	}
 }
+
+func TestUnknownAllowAndDenyNamesRefuseStartup(t *testing.T) {
+	for _, deny := range []bool{false, true} {
+		cfg := cfgWith(map[string][]config.Instance{"sonarr": {{Name: "main", URL: "http://example.invalid", APIKey: "fixture"}}}, permsFull)
+		if deny {
+			cfg.Tools.Deny = []string{"sonarr_delete_seris"}
+		} else {
+			cfg.Tools.Allow = []string{"sonarr_list_seris"}
+		}
+		s := New(cfg, logger.New("error", "test"))
+		if s.PolicyError() == nil {
+			t.Fatal("misspelled tool was accepted")
+		}
+		if _, err := s.HTTPHandler(); err == nil {
+			t.Fatal("invalid policy exposed an HTTP server")
+		}
+		if err := s.RunStdio(context.Background()); err == nil {
+			t.Fatal("invalid policy exposed stdio")
+		}
+	}
+}
+
+func TestKnownToolForUnconfiguredServiceIsAValidPolicyName(t *testing.T) {
+	cfg := cfgWith(map[string][]config.Instance{"sonarr": {{Name: "main", URL: "http://example.invalid", APIKey: "fixture"}}}, permsFull)
+	cfg.Tools.Deny = []string{"radarr_delete_movie"}
+	if err := New(cfg, logger.New("error", "test")).PolicyError(); err != nil {
+		t.Fatal(err)
+	}
+}

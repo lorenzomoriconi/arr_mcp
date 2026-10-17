@@ -22,4 +22,4 @@
 
 ## Fork command receipts
 
-`radarr_list_commands` lists native background command receipts; `radarr_get_command` reads one by its positive `id`. Both are read-only and return only command id, name and status. A completed command is not proof of an import: verify exact-download history and current library files. See [fork configuration](../../FORK.md) for guarded imports and history filters.
+`radarr_list_commands` lists native background command receipts; `radarr_get_command` reads one by its positive `id`. Both are read-only and return command id, name, status, queued/started/ended times, result and message. A completed command is not proof of an import: verify exact-download history and current library files. See [fork configuration](../../FORK.md) for guarded imports and history filters.

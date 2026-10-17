@@ -31,10 +31,11 @@ type importPlans struct {
 	mu       sync.Mutex
 	pending  map[string]importPlan
 	attempts map[string]time.Time
+	busy     map[string]bool
 }
 
 func newImportPlans() *importPlans {
-	return &importPlans{pending: map[string]importPlan{}, attempts: map[string]time.Time{}}
+	return &importPlans{pending: map[string]importPlan{}, attempts: map[string]time.Time{}, busy: map[string]bool{}}
 }
 
 // Callers hold mu; tests may call this without concurrency.
@@ -94,6 +95,7 @@ func (s *Server) previewGuardedImport(ctx context.Context, c *arr.Client, servic
 	id := rand.Text()
 	expires := now.Add(importPlanTTL)
 	s.imports.pending[id] = importPlan{service: service, instance: inst.Name, query: in, snapshot: snapshot, expires: expires}
+	s.log.Info("manual import planned: service=%s instance=%s downloadId=%s files=%d expires=%s", service, inst.Name, in.DownloadID, len(files), expires.UTC().Format(time.RFC3339))
 	return ManualImportCandidateList{Files: files, Count: len(files), PlanID: id, ExpiresAt: expires.UTC().Format(time.RFC3339), Warnings: warnings}, nil
 }
 
@@ -109,50 +111,86 @@ func (s *Server) applyGuardedImport(ctx context.Context, c *arr.Client, service 
 	if err != nil {
 		return zero, err
 	}
-	// Serialise this server's imports through validation and submission. This
-	// cannot lock out native app jobs or other API clients.
+	scope := service + "/" + inst.Name
 	s.imports.mu.Lock()
-	defer s.imports.mu.Unlock()
 	s.imports.prune(time.Now())
 	plan, ok := s.imports.pending[in.PlanID]
 	if !ok || plan.service != service || plan.instance != inst.Name {
+		s.imports.mu.Unlock()
 		return zero, fmt.Errorf("unknown, expired or already consumed import plan; obtain a fresh preview")
 	}
 	key := importKey(service, inst.Name, plan.query.DownloadID)
-	if _, ok := s.imports.attempts[key]; ok {
-		return zero, fmt.Errorf("this download already has a recent submission; inspect commands and history")
+	_, recent := s.imports.attempts[key]
+	if recent || s.imports.busy[scope] {
+		s.imports.mu.Unlock()
+		return zero, fmt.Errorf("this application already has an import being validated or recently submitted; inspect commands and history")
 	}
+	delete(s.imports.pending, in.PlanID)
+	s.imports.busy[scope] = true
+	s.imports.mu.Unlock()
+	defer func() { s.imports.mu.Lock(); delete(s.imports.busy, scope); s.imports.mu.Unlock() }()
 	files, _, err := guardedImportFiles(ctx, c, service, plan.query)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("import validation failed; plan consumed, obtain a fresh preview: %w", err)
 	}
 	snapshot, err := importSnapshot(files)
 	if err != nil {
 		return zero, err
 	}
 	if snapshot != plan.snapshot {
-		return zero, fmt.Errorf("import preview changed; obtain and review a fresh preview")
+		return zero, fmt.Errorf("import preview changed; plan consumed, obtain a fresh preview")
 	}
 	payload := make([]arr.ManualImportFile, 0, len(files))
 	for _, f := range files {
 		payload = append(payload, arr.ManualImportFile{Path: f.Path, SeriesID: f.SeriesID, EpisodeIDs: f.EpisodeIDs, MovieID: f.MovieID, Quality: f.Quality, Languages: f.Languages, ReleaseGroup: f.ReleaseGroup, DownloadID: f.DownloadID})
 	}
-	submitted := false
+	var submittedAt time.Time
 	command, err := arr.ManualImportChecked(ctx, c, payload, "copy", func() error {
 		if !time.Now().Before(plan.expires) {
-			delete(s.imports.pending, in.PlanID)
 			return fmt.Errorf("import plan expired during validation; obtain a fresh preview")
 		}
-		// Consume before POST, including an HTTP failure or lost response.
-		delete(s.imports.pending, in.PlanID)
-		s.imports.attempts[key] = time.Now().Add(importPlanTTL)
-		submitted = true
+		if err := importCommandsIdle(ctx, c); err != nil {
+			return err
+		}
+		s.imports.mu.Lock()
+		defer s.imports.mu.Unlock()
+		if !time.Now().Before(plan.expires) {
+			return fmt.Errorf("import plan expired during command check; obtain a fresh preview")
+		}
+		submittedAt = time.Now().UTC()
+		s.imports.attempts[key] = submittedAt.Add(importPlanTTL)
+		s.log.Info("manual import submitting: service=%s instance=%s downloadId=%s files=%d at=%s", service, inst.Name, plan.query.DownloadID, len(files), submittedAt.Format(time.RFC3339Nano))
 		return nil
 	})
-	if err != nil && submitted {
-		return zero, fmt.Errorf("import submission outcome is uncertain; do not replay it; inspect commands and history: %w", err)
+	if err != nil && !submittedAt.IsZero() {
+		s.log.Warn("manual import uncertain: service=%s instance=%s downloadId=%s at=%s", service, inst.Name, plan.query.DownloadID, submittedAt.Format(time.RFC3339Nano))
+		return zero, fmt.Errorf("import submission for downloadId %s at %s is uncertain; do not replay it; inspect command receipts and exact-download history: %w", plan.query.DownloadID, submittedAt.Format(time.RFC3339Nano), err)
+	}
+	if err == nil {
+		s.log.Info("manual import submitted: service=%s instance=%s downloadId=%s commandId=%d status=%s", service, inst.Name, plan.query.DownloadID, command.ID, command.Status)
 	}
 	return command, err
+}
+
+// importCommandsIdle also protects restarts and copies that outlive the local
+// recent-submission hold. It cannot atomically exclude unrelated API clients.
+func importCommandsIdle(ctx context.Context, c *arr.Client) error {
+	commands, err := arr.GetJSON[[]arr.CommandResult](ctx, c, "/command")
+	if err != nil {
+		return err
+	}
+	for _, command := range commands {
+		switch strings.ToLower(command.Name) {
+		case "manualimport", "downloadedepisodesscan", "downloadedmoviesscan", "processmonitoreddownloads":
+			switch strings.ToLower(command.Status) {
+			case "completed", "failed", "aborted", "cancelled", "orphaned":
+				continue
+			default:
+				return fmt.Errorf("native %s command %d is still active (%s); wait and inspect its receipt", command.Name, command.ID, command.Status)
+			}
+		}
+	}
+	return nil
 }
 
 // guardedImportFiles trusts the app's own scanner, not caller paths/mappings.
@@ -171,6 +209,9 @@ func guardedImportFiles(ctx context.Context, c *arr.Client, service string, in M
 	if targetID == 0 {
 		return nil, nil, fmt.Errorf("guarded import preview requires one positive %s target id", service)
 	}
+	if err := importCommandsIdle(ctx, c); err != nil {
+		return nil, nil, err
+	}
 	if err := importDownloadComplete(ctx, c, in.DownloadID, service, targetID); err != nil {
 		return nil, nil, err
 	}
@@ -181,6 +222,26 @@ func guardedImportFiles(ctx context.Context, c *arr.Client, service string, in M
 	if len(roots) == 0 {
 		return nil, nil, fmt.Errorf("no library roots available; refusing to import")
 	}
+	kind := "series"
+	if service == "radarr" {
+		kind = "movie"
+	}
+	target, err := arr.GetJSON[struct {
+		ID          int    `json:"id"`
+		Path        string `json:"path"`
+		HasFile     bool   `json:"hasFile"`
+		MovieFileID int    `json:"movieFileId"`
+		MovieFile   struct {
+			ID int `json:"id"`
+		} `json:"movieFile"`
+	}](ctx, c, fmt.Sprintf("/%s/%d", kind, targetID))
+	if err != nil {
+		return nil, nil, err
+	}
+	if target.ID != targetID || !path.IsAbs(target.Path) {
+		return nil, nil, fmt.Errorf("target identity or library path is unavailable")
+	}
+	roots = append(roots, arr.RootFolder{Path: target.Path})
 	missing := map[int]bool{}
 	if service == "sonarr" {
 		episodes, e := arr.SonarrListEpisodes(ctx, c, targetID)
@@ -193,18 +254,7 @@ func guardedImportFiles(ctx context.Context, c *arr.Client, service string, in M
 			}
 		}
 	} else {
-		movie, e := arr.GetJSON[struct {
-			ID          int  `json:"id"`
-			HasFile     bool `json:"hasFile"`
-			MovieFileID int  `json:"movieFileId"`
-			MovieFile   struct {
-				ID int `json:"id"`
-			} `json:"movieFile"`
-		}](ctx, c, fmt.Sprintf("/movie/%d", targetID))
-		if e != nil {
-			return nil, nil, e
-		}
-		if movie.ID == targetID && !movie.HasFile && movie.MovieFileID == 0 && movie.MovieFile.ID == 0 {
+		if !target.HasFile && target.MovieFileID == 0 && target.MovieFile.ID == 0 {
 			missing[targetID] = true
 		}
 	}
@@ -301,7 +351,7 @@ func importDownloadComplete(ctx context.Context, c *arr.Client, downloadID, serv
 			if !strings.EqualFold(row.Status, "completed") || row.SizeLeft == nil || *row.SizeLeft != 0 || row.State != "importBlocked" {
 				return fmt.Errorf("download must be completed with zero bytes left and native importBlocked state")
 			}
-			if service == "sonarr" && row.SeriesID != 0 && row.SeriesID != targetID || service == "radarr" && row.MovieID != 0 && row.MovieID != targetID {
+			if service == "sonarr" && row.SeriesID != targetID || service == "radarr" && row.MovieID != targetID {
 				return fmt.Errorf("download queue belongs to a different target")
 			}
 		}

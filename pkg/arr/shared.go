@@ -40,30 +40,34 @@ type QueueItem struct {
 // HistoryData keeps import verification evidence without exposing arbitrary
 // upstream history data (which can include authenticated download URLs).
 type HistoryData struct {
-	EpisodeFileID string `json:"episodeFileId,omitempty"`
-	MovieFileID   string `json:"movieFileId,omitempty"`
-	DroppedPath   string `json:"droppedPath,omitempty"`
-	ImportedPath  string `json:"importedPath,omitempty"`
+	FileID       string `json:"fileId,omitempty"`
+	DroppedPath  string `json:"droppedPath,omitempty"`
+	ImportedPath string `json:"importedPath,omitempty"`
 }
 
 // HistoryRecord is a past grab, import, or failure.
 type HistoryRecord struct {
-	DownloadID  string      `json:"downloadId,omitempty"`
-	EpisodeID   int         `json:"episodeId,omitempty"`
-	SeriesID    int         `json:"seriesId,omitempty"`
-	MovieID     int         `json:"movieId,omitempty"`
-	Data        HistoryData `json:"data,omitempty"`
 	ID          int         `json:"id"`
 	EventType   string      `json:"eventType,omitempty"`
 	Date        string      `json:"date,omitempty"`
 	SourceTitle string      `json:"sourceTitle,omitempty"`
+	DownloadID  string      `json:"downloadId,omitempty"`
+	EpisodeID   int         `json:"episodeId,omitempty"`
+	SeriesID    int         `json:"seriesId,omitempty"`
+	MovieID     int         `json:"movieId,omitempty"`
+	Data        HistoryData `json:"data,omitzero"`
 }
 
 // CommandResult reports the outcome of triggering a background command.
 type CommandResult struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status,omitempty"`
+	Queued  string `json:"queued,omitempty"`
+	Started string `json:"started,omitempty"`
+	Ended   string `json:"ended,omitempty"`
+	Result  string `json:"result,omitempty"`
+	Message string `json:"message,omitempty"`
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Status  string `json:"status,omitempty"`
 }
 
 // Episode is the trimmed view of a Sonarr episode.

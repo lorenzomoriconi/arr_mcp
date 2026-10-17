@@ -24,9 +24,10 @@ type instanceSelector interface{ instanceName() string }
 
 // toolMeta describes a tool independently of its handler.
 type toolMeta struct {
-	name        string
-	description string
-	access      Access
+	nonIdempotent bool
+	name          string
+	description   string
+	access        Access
 }
 
 // register adds one tool, wiring instance resolution, permission gating and
@@ -35,6 +36,7 @@ func register[In instanceSelector, Out any](
 	s *Server, service string, spec arr.ServiceSpec, meta toolMeta,
 	fn func(context.Context, *arr.Client, In) (Out, error),
 ) {
+	s.knownTools[meta.name] = struct{}{}
 	if !s.cfg.Tools.Allows(meta.name, meta.access == AccessDestructive) || !s.registersForService(service, meta.access) {
 		return
 	}
@@ -55,13 +57,20 @@ func register[In instanceSelector, Out any](
 		prop.Enum = enum
 	}
 
+	annotations := meta.access.Annotations()
+	if meta.nonIdempotent {
+		annotations.IdempotentHint = false
+	}
 	mcp.AddTool(s.mcp, &mcp.Tool{
 		Name:        meta.name,
 		Description: meta.description,
-		Annotations: meta.access.Annotations(),
+		Annotations: annotations,
 		InputSchema: schema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 		var zero Out
+		if s.policyErr != nil {
+			return nil, zero, s.policyErr
+		}
 		if !s.cfg.Tools.Allows(meta.name, meta.access == AccessDestructive) {
 			return nil, zero, fmt.Errorf("tool %s is denied by server policy", meta.name)
 		}
