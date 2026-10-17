@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.2](https://github.com/lorenzomoriconi/arr_mcp/compare/arr_mcp/v1.15.1...arr_mcp/v1.15.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **history:** canonicalize native torrent hash filters ([b800e3e](https://github.com/lorenzomoriconi/arr_mcp/commit/b800e3e3236b40a3140e45c44add9c5b99e3060f))
+
 ## [1.15.1](https://github.com/lorenzomoriconi/arr_mcp/compare/arr_mcp/v1.15.0...arr_mcp/v1.15.1) (2026-10-17)
 
 
